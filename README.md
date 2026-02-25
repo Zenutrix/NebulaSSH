@@ -1,39 +1,57 @@
-# NebulaSSH 🚀
+# NebulaSSH 🌌
 
-[![Website](https://img.shields.io/badge/Website-nebulassh.schoepf--tirol.at-blue?style=for-the-badge&logo=google-chrome)](https://nebulassh.schoepf-tirol.at/)
-[![Made with Wails](https://img.shields.io/badge/Wails-Go_%2B_Svelte-red?style=for-the-badge&logo=go)](https://wails.io/)
+> **The Professional Open Source Terminal Experience.**
 
-**NebulaSSH** ist ein moderner, pfeilschneller und plattformübergreifender Terminal-Client für SSH- und serielle (COM) Verbindungen. Entwickelt für Administratoren, Netzwerker und Maker, die ein aufgeräumtes und effizientes Werkzeug für ihren Alltag brauchen.
+NebulaSSH ist ein portabler, hochperformanter Terminal-Emulator, der SSH, SFTP und Serial Console in einem einzigen, schlanken Tool vereint. Entwickelt mit Fokus auf Sicherheit, Geschwindigkeit und reibungslose Workflows für Systemadministratoren und Hardware-Entwickler.
 
-![NebulaSSH Screenshot](https://nebulassh.schoepf-tirol.at/screenshot.png)
-
-🌐 **[Offizielle Website besuchen](https://nebulassh.schoepf-tirol.at/)**
-
----
+<!-- Ersetze dies ggf. durch einen echten GitHub-Link zum Bild -->
 
 ## ✨ Features
 
-* 💻 **Multi-Protokoll Unterstützung:** Nahtloser Wechsel zwischen SSH-Verbindungen (Netzwerk) und seriellen Verbindungen (COM-Ports/USB).
-* 📑 **Tab-System:** Mehrere parallele Sitzungen gleichzeitig offen halten und blitzschnell zwischen ihnen wechseln.
-* ⚡ **Makros & Snippets:** Häufig genutzte Befehle (z.B. Updates, Reboots) als Buttons speichern und mit einem Klick ausführen.
-* 🔍 **Live-Suche (Strg + F):** Durchsuche Terminal-Outputs (bis zu 50.000 Zeilen Scrollback) in Echtzeit mit farbigem Highlighting.
-* 📋 **Smart Copy & Paste:** Markierter Text wird sofort automatisch kopiert (ohne Fokusverlust) und kann per Rechtsklick eingefügt werden. Auch Passwörter lassen sich mit einem Klick in die Zwischenablage befördern.
-* 💾 **Geräte-Manager:** Speichere Server, Router und Switches mit IP und Benutzername für schnellen Zugriff.
-* 🔌 **Baudraten-Profile:** Eigene Baudraten für spezielle serielle Hardware anlegen und verwalten.
+* **SSH Terminal (powered by xterm.js):** Ultraschnelles Rendering, Multi-Tab-Support und Live-Suche (`Strg + F`).
 
-## 🛠️ Tech-Stack
+* **Integrierter SFTP-Browser:** Dateien direkt auf dem Server verwalten, hochladen, herunterladen und mit dem internen Editor bearbeiten.
 
-NebulaSSH wurde gebaut mit:
-* **[Wails](https://wails.io/)** - Das Framework für Desktop-Apps mit Go & Web-Technologien.
-* **[Go (Golang)](https://go.dev/)** - Für ein rasend schnelles, ressourcenschonendes Backend (SSH & Serial Handling).
-* **[Svelte](https://svelte.dev/)** - Für eine reaktive, flüssige und moderne Benutzeroberfläche.
-* **[xterm.js](https://xtermjs.org/)** - Der Industrie-Standard für Terminal-Emulation im Web.
+* **Serial Console:** Direkter Zugriff auf COM-Ports inkl. anpassbarer Baudraten-Profile (perfekt für Cisco, Arduino, Raspberry Pi).
 
-## 🚀 Installation & Entwicklung
+* **SSH Key Manager:** Sichere Verwaltung von `.pem` und `id_rsa` Dateien.
 
-Voraussetzungen: [Go](https://go.dev/), [Node.js](https://nodejs.org/) und [Wails CLI](https://wails.io/docs/gettingstarted/installation).
+* **Smart Macros:** Komplexe Befehlsketten als Snippets speichern und mit einem Klick ausführen.
 
-**1. Repository klonen:**
+* **Zero-Knowledge Architektur:** Vollständig lokale, AES-256-verschlüsselte Speicherung aller Credentials.
+
+## 🛡️ Sicherheit & Architektur
+
+NebulaSSH speichert Zugangsdaten **niemals im Klartext**.
+Die Dateien `hosts.json` und `keys.json` werden mithilfe des **Go AES-256-GCM** Algorithmus verschlüsselt. Der dafür notwendige Master-Key wird sicher im nativen **System-Keyring** (Windows Credential Manager / macOS Keychain / Linux Secret Service) abgelegt.
+
+Es gibt keinen Cloud-Sync und keine Telemetrie. Deine Daten verlassen niemals deinen Rechner.
+
+## 🛠️ Tech Stack
+
+NebulaSSH ist eine Desktop-Anwendung, die auf modernen Web-Technologien und Go basiert:
+
+* **Backend:** [Go](https://go.dev/) + [Wails](https://wails.io/)
+
+* **Frontend:** [Svelte](https://svelte.dev/) + [Vite](https://vitejs.dev/)
+
+* **Styling:** [Tailwind CSS](https://tailwindcss.com/)
+
+* **Terminal Engine:** [Xterm.js](https://xtermjs.org/)
+
+## 🚀 Entwicklung & Setup
+
+Da NebulaSSH auf dem Wails-Framework aufbaut, weicht der Workflow leicht von einem Standard-Vite-Projekt ab.
+
+### Voraussetzungen
+
+1. [Go](https://go.dev/doc/install) (1.18+)
+
+2. [Node.js](https://nodejs.org/en/download/) (16+)
+
+3. [Wails CLI](https://wails.io/docs/gettingstarted/installation)
+
+Installiere die Wails CLI:
+
 ```bash
-git clone [https://github.com/Zenutrix/NebulaSSH.git](https://github.com/Zenutrix/NebulaSSH.git)
-cd NebulaSSH
+go install [github.com/wailsapp/wails/v2/cmd/wails@latest](https://github.com/wailsapp/wails/v2/cmd/wails@latest)

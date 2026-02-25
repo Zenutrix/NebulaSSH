@@ -1,57 +1,63 @@
-# NebulaSSH 🌌
+# Svelte + Vite
 
-> **The Professional Open Source Terminal Experience.**
+This template should help get you started developing with Svelte in Vite.
 
-NebulaSSH ist ein portabler, hochperformanter Terminal-Emulator, der SSH, SFTP und Serial Console in einem einzigen, schlanken Tool vereint. Entwickelt mit Fokus auf Sicherheit, Geschwindigkeit und reibungslose Workflows für Systemadministratoren und Hardware-Entwickler.
+## Recommended IDE Setup
 
-<!-- Ersetze dies ggf. durch einen echten GitHub-Link zum Bild -->
+[VS Code](https://code.visualstudio.com/)
 
-## ✨ Features
++ [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
 
-* **SSH Terminal (powered by xterm.js):** Ultraschnelles Rendering, Multi-Tab-Support und Live-Suche (`Strg + F`).
+## Need an official Svelte framework?
 
-* **Integrierter SFTP-Browser:** Dateien direkt auf dem Server verwalten, hochladen, herunterladen und mit dem internen Editor bearbeiten.
+Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its
+serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less,
+and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
 
-* **Serial Console:** Direkter Zugriff auf COM-Ports inkl. anpassbarer Baudraten-Profile (perfekt für Cisco, Arduino, Raspberry Pi).
+## Technical considerations
 
-* **SSH Key Manager:** Sichere Verwaltung von `.pem` und `id_rsa` Dateien.
+**Why use this over SvelteKit?**
 
-* **Smart Macros:** Komplexe Befehlsketten als Snippets speichern und mit einem Klick ausführen.
+- It brings its own routing solution which might not be preferable for some users.
+- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
+  `vite dev` and `vite build` wouldn't work in a SvelteKit environment, for example.
 
-* **Zero-Knowledge Architektur:** Vollständig lokale, AES-256-verschlüsselte Speicherung aller Credentials.
+This template contains as little as possible to get started with Vite + Svelte, while taking into account the developer
+experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite`
+templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
 
-## 🛡️ Sicherheit & Architektur
+Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been
+structured similarly to SvelteKit so that it is easy to migrate.
 
-NebulaSSH speichert Zugangsdaten **niemals im Klartext**.
-Die Dateien `hosts.json` und `keys.json` werden mithilfe des **Go AES-256-GCM** Algorithmus verschlüsselt. Der dafür notwendige Master-Key wird sicher im nativen **System-Keyring** (Windows Credential Manager / macOS Keychain / Linux Secret Service) abgelegt.
+**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
 
-Es gibt keinen Cloud-Sync und keine Telemetrie. Deine Daten verlassen niemals deinen Rechner.
+Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash
+references keeps the default TypeScript setting of accepting type information from the entire workspace, while also
+adding `svelte` and `vite/client` type information.
 
-## 🛠️ Tech Stack
+**Why include `.vscode/extensions.json`?**
 
-NebulaSSH ist eine Desktop-Anwendung, die auf modernen Web-Technologien und Go basiert:
+Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to
+install the recommended extension upon opening the project.
 
-* **Backend:** [Go](https://go.dev/) + [Wails](https://wails.io/)
+**Why enable `checkJs` in the JS template?**
 
-* **Frontend:** [Svelte](https://svelte.dev/) + [Vite](https://vitejs.dev/)
+It is likely that most cases of changing variable types in runtime are likely to be accidental, rather than deliberate.
+This provides advanced typechecking out of the box. Should you like to take advantage of the dynamically-typed nature of
+JavaScript, it is trivial to change the configuration.
 
-* **Styling:** [Tailwind CSS](https://tailwindcss.com/)
+**Why is HMR not preserving my local component state?**
 
-* **Terminal Engine:** [Xterm.js](https://xtermjs.org/)
+HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr`
+and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the
+details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
 
-## 🚀 Entwicklung & Setup
+If you have state that's important to retain within a component, consider creating an external store which would not be
+replaced by HMR.
 
-Da NebulaSSH auf dem Wails-Framework aufbaut, weicht der Workflow leicht von einem Standard-Vite-Projekt ab.
-
-### Voraussetzungen
-
-1. [Go](https://go.dev/doc/install) (1.18+)
-
-2. [Node.js](https://nodejs.org/en/download/) (16+)
-
-3. [Wails CLI](https://wails.io/docs/gettingstarted/installation)
-
-Installiere die Wails CLI:
-
-```bash
-go install [github.com/wailsapp/wails/v2/cmd/wails@latest](https://github.com/wailsapp/wails/v2/cmd/wails@latest)
+```js
+// store.js
+// An extremely simple external store
+import { writable } from 'svelte/store'
+export default writable(0)
+```
