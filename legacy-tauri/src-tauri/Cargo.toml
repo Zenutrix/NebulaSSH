@@ -1,0 +1,38 @@
+[package]
+name = "nebulassh"
+version = "2.0.0"
+description = "NebulaSSH - schneller SSH-, SFTP- und Serial-Client für Windows"
+authors = ["Thomas Schöpf"]
+edition = "2021"
+
+[lib]
+name = "nebulassh_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "fs"] }
+russh = { version = "0.65", default-features = false, features = ["ring", "rsa", "flate2", "des"] }
+russh-sftp = "3"
+serialport = "4"
+aes-gcm = "0.10"
+base64 = "0.22"
+rand = "0.8"
+anyhow = "1"
+sha2 = "0.10"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

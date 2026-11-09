@@ -1,0 +1,4 @@
+Automatische Updates mit Signaturprüfung (Ed25519) und SHA-256-Kontrolle
+Überarbeitete Oberfläche: Gerätekacheln mit Online-Status, neue Tab-Leiste, Schnellaktionen
+Datei-Explorer: klickbarer Pfad, farbige Symbole
+Toasts, Statusanzeige und Makros im neuen Design

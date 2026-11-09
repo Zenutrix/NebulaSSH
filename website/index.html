@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NebulaSSH – nativer SSH-, SFTP- und Serial-Client für Windows</title>
+<meta name="description" content="NebulaSSH ist ein nativer SSH-, SFTP- und Serial-Client für Windows: Tabs, Datei-Explorer mit Editor und Drag & Drop, SSH-Key-Generator, verschlüsselte Geräteverwaltung und Backup. Kostenlos, 4,1 MB Installer.">
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --night: #0f0f17;
+    --deep: #0b0a14;
+    --panel: #161621;
+    --panel-2: #1e1e2d;
+    --line: #2e2e3e;
+    --violet: #6200ee;
+    --violet-hi: #7c22ff;
+    --lavender: #b9a4ff;
+    --amber: #ffb547;
+    --text: #ecebf3;
+    --muted: #9a99ad;
+    --green: #7ee08a;
+    --wrap: 1180px;
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--night); color: var(--text);
+    font-family: var(--display); font-size: 1.0625rem; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--lavender); text-underline-offset: 3px; }
+  a:hover { color: #fff; }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; border-radius: 4px; }
+  img { max-width: 100%; display: block; }
+  .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 24px; }
+
+  /* Kopfzeile */
+  header.top { border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; background: rgba(15,15,23,.85); backdrop-filter: blur(10px); }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.2rem; color: #fff; text-decoration: none; letter-spacing: -.01em; }
+  .brand img { width: 32px; height: 32px; }
+  .brand span { color: var(--lavender); }
+  nav.top a { color: var(--muted); text-decoration: none; margin-left: 26px; font-size: .95rem; }
+  nav.top a:hover { color: #fff; }
+  nav.top a.cta { color: #fff; background: var(--violet); padding: 8px 14px; border-radius: 8px; }
+  nav.top a.cta:hover { background: var(--violet-hi); }
+
+  /* Hero */
+  .hero { padding: 76px 0 40px; position: relative; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; left: 50%; top: -420px; width: 1200px; height: 900px; transform: translateX(-50%);
+    background: radial-gradient(closest-side, #6200ee55, transparent 70%); pointer-events: none;
+  }
+  .hero-text { position: relative; text-align: center; max-width: 820px; margin: 0 auto; }
+  .hero-logo { width: 104px; height: 104px; margin: 0 auto 26px; filter: drop-shadow(0 18px 40px #6200ee66); }
+  .hero h1 {
+    font-size: clamp(2.5rem, 5.6vw, 4.6rem); line-height: 1.02; letter-spacing: -.035em;
+    font-weight: 800; margin: 0 0 22px; font-variation-settings: "opsz" 96;
+  }
+  .hero p.lead { color: var(--muted); font-size: 1.22rem; max-width: 34em; margin: 0 auto 34px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 10px;
+    font-weight: 700; text-decoration: none; font-size: 1rem; transition: background .15s, border-color .15s;
+  }
+  .btn-primary { background: var(--violet); color: #fff; }
+  .btn-primary:hover { background: var(--violet-hi); color: #fff; }
+  .btn-ghost { color: var(--text); border: 1px solid var(--line); }
+  .btn-ghost:hover { border-color: var(--lavender); color: #fff; }
+  .btn small { font-weight: 400; opacity: .75; }
+  .meta { margin-top: 16px; color: var(--muted); font-size: .9rem; }
+
+  .shot {
+    position: relative; margin: 56px auto 0; max-width: 1120px;
+    border-radius: 14px; overflow: hidden; border: 1px solid #3a2f63;
+    box-shadow: 0 50px 120px -40px #000, 0 0 0 1px #00000060, 0 30px 80px -50px #6200ee;
+  }
+  .shot .bar { height: 34px; background: #13131c; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; padding: 0 14px; color: var(--muted); font-size: 12.5px; }
+  .shot .bar img { width: 16px; height: 16px; }
+
+  /* Abschnitte */
+  section { padding: 100px 0; }
+  section + section { border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(1.9rem, 3.2vw, 2.7rem); letter-spacing: -.025em; line-height: 1.1; margin: 0 0 14px; font-weight: 800; }
+  .intro { color: var(--muted); max-width: 38em; margin: 0 0 54px; font-size: 1.125rem; }
+
+  /* Funktionen im Wechsel mit echten Screenshots */
+  .feature { display: grid; grid-template-columns: 1fr 1.35fr; gap: 56px; align-items: center; margin-bottom: 96px; }
+  .feature:last-child { margin-bottom: 0; }
+  .feature.flip { grid-template-columns: 1.35fr 1fr; }
+  .feature.flip .copy { order: 2; }
+  .feature h3 { font-size: 1.65rem; margin: 0 0 12px; letter-spacing: -.015em; }
+  .feature p { color: var(--muted); margin: 0 0 16px; }
+  .feature ul { margin: 0; padding: 0; list-style: none; }
+  .feature li { padding: 6px 0 6px 24px; position: relative; color: #d6d5e2; }
+  .feature li::before { content: ""; position: absolute; left: 2px; top: 15px; width: 8px; height: 8px; border-radius: 2px; background: var(--violet-hi); }
+  .feature li.amber::before { background: var(--amber); }
+  .pic { border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 30px 70px -35px #000; }
+  kbd { font-family: var(--mono); font-size: .82em; background: var(--panel-2); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; color: var(--text); }
+  code { font-family: var(--mono); font-size: .88em; color: var(--lavender); }
+
+  /* Kleinere Funktionen */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 48px; }
+  .grid div { padding: 22px 0; border-top: 1px solid var(--line); }
+  .grid h4 { margin: 0 0 6px; font-size: 1.08rem; }
+  .grid p { margin: 0; color: var(--muted); font-size: .98rem; }
+
+  /* Vergleich */
+  .v2 { display: grid; grid-template-columns: 1fr 1.2fr; gap: 64px; align-items: start; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  caption { text-align: left; color: var(--muted); font-size: .9rem; padding-bottom: 14px; }
+  th, td { text-align: left; padding: 14px 12px; border-bottom: 1px solid var(--line); }
+  thead th { color: var(--muted); font-weight: 500; font-size: .9rem; }
+  tbody th { font-weight: 500; }
+  td.new { color: #fff; font-weight: 700; }
+  td.old { color: var(--muted); }
+
+  /* Download */
+  .downloads { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; }
+  .dl { border: 1px solid var(--line); border-radius: 12px; padding: 28px; display: flex; flex-direction: column; gap: 8px; }
+  .dl.main { background: linear-gradient(160deg, #6200ee2e, transparent 60%), var(--panel); border-color: #6200ee90; }
+  .dl h3 { margin: 0; font-size: 1.3rem; }
+  .dl p { margin: 0 0 14px; color: var(--muted); font-size: .97rem; flex: 1; }
+  .dl .size { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+  .steps { margin: 40px 0 0; padding: 0; list-style: none; counter-reset: s; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .steps li { counter-increment: s; color: var(--muted); font-size: .97rem; }
+  .steps li::before { content: counter(s); display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--panel-2); color: var(--amber); font-weight: 700; margin-right: 8px; font-size: .85rem; }
+  .req { margin-top: 32px; color: var(--muted); font-size: .95rem; }
+
+  footer { border-top: 1px solid var(--line); padding: 36px 0 48px; color: var(--muted); font-size: .9rem; }
+  footer .wrap { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer .brand { font-size: 1rem; }
+  footer .brand img { width: 24px; height: 24px; }
+
+  @media (max-width: 920px) {
+    .feature, .feature.flip, .v2 { grid-template-columns: 1fr; gap: 28px; }
+    .feature.flip .copy { order: 0; }
+    .grid { grid-template-columns: 1fr 1fr; }
+    .downloads, .steps { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    nav.top a:not(.cta) { display: none; }
+    .wrap { padding: 0 16px; }
+    .grid { grid-template-columns: 1fr; }
+    section { padding: 64px 0; }
+    .hero { padding-top: 48px; }
+    .shot .bar { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="icon.png" alt=""><strong>Nebula<span>SSH</span></strong></a>
+    <nav class="top" aria-label="Hauptnavigation">
+      <a href="#funktionen">Funktionen</a>
+      <a href="#neu">Neu in 2.2</a>
+      <a class="cta" href="#download">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap">
+      <div class="hero-text">
+        <img class="hero-logo" src="logo.png" alt="NebulaSSH-Logo">
+        <h1>SSH, SFTP und COM&#8209;Port in einem nativen Fenster.</h1>
+        <p class="lead">NebulaSSH ist ein schlanker Terminal-Client für Windows – für Server, Switches, Router und alles, was an einer seriellen Konsole hängt. Komplett in Rust geschrieben, ohne Browser im Hintergrund.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://github.com/Zenutrix/NebulaSSH/releases/latest/download/NebulaSSH-Setup.exe">NebulaSSH installieren <small>4,1 MB</small></a>
+          <a class="btn btn-ghost" href="#funktionen">Funktionen ansehen</a>
+        </div>
+        <p class="meta">Version 2.2 für Windows 10 und 11 (64&nbsp;Bit) · kostenlos · by Thomas Schöpf</p>
+      </div>
+      <figure class="shot">
+        <div class="bar" aria-hidden="true"><img src="icon.png" alt="">Test-Server – NebulaSSH</div>
+        <img src="screenshots/main.png" width="1384" height="861" alt="NebulaSSH mit gespeicherten Geräten in Gruppen, einer SSH-Sitzung und dem SFTP-Datei-Explorer">
+      </figure>
+    </div>
+  </div>
+
+  <section id="funktionen">
+    <div class="wrap">
+      <h2>Alles für die Arbeit an der Konsole</h2>
+      <p class="intro">Terminal, Dateien, Schlüssel und Geräte an einem Ort – ohne zwischen drei Programmen zu wechseln.</p>
+
+      <div class="feature">
+        <div class="copy">
+          <h3>Geräte im Griff</h3>
+          <p>Gespeicherte Server, Switches und serielle Konsolen in Gruppen, mit Favoriten, Suche und Notizen.</p>
+          <ul>
+            <li>Ein Klick verbindet in einem neuen Tab</li>
+            <li>Rechtsklick: bearbeiten, duplizieren, Favorit</li>
+            <li class="amber">COM-Ports mit eigenen Baudraten-Profilen</li>
+            <li>Passwort speichern – oder bei jeder Verbindung fragen</li>
+          </ul>
+        </div>
+        <div class="pic"><img src="screenshots/start.png" width="1384" height="861" alt="Startseite mit zuletzt verwendeten Geräten, Favoriten und Gruppen" loading="lazy"></div>
+      </div>
+
+      <div class="feature flip">
+        <div class="copy">
+          <h3>Dateien bearbeiten, direkt auf dem Server</h3>
+          <p>Der SFTP-Explorer sitzt neben dem Terminal. Doppelklick auf eine Datei öffnet den Editor mit Zeilennummern; <kbd>Strg</kbd>+<kbd>S</kbd> speichert zurück auf den Server.</p>
+          <ul>
+            <li>Dateien und Ordner per Drag &amp; Drop hochladen</li>
+            <li>Fortschrittsanzeige für Up- und Downloads</li>
+            <li>Umbenennen, Rechte ändern, Ordner rekursiv löschen</li>
+            <li>„Im Terminal öffnen“ springt per <code>cd</code> in den Ordner</li>
+          </ul>
+        </div>
+        <div class="pic"><img src="screenshots/editor.png" width="1384" height="861" alt="Eingebauter Editor mit einer nginx-Konfiguration" loading="lazy"></div>
+      </div>
+
+      <div class="feature">
+        <div class="copy">
+          <h3>SSH-Keys ohne Kommandozeile</h3>
+          <p>Ed25519, RSA 4096 oder ECDSA erzeugen, optional mit Passphrase. NebulaSSH zeigt dir Schritt für Schritt, wie der Key auf deinen Linux-Server kommt – oder hinterlegt ihn mit einem Klick selbst, inklusive richtiger Rechte.</p>
+          <ul>
+            <li>Public Key kopieren, Anleitung kopieren</li>
+            <li>Keys exportieren (<code>name</code> und <code>name.pub</code>)</li>
+            <li>Vorhandene Keys aus Datei importieren</li>
+          </ul>
+        </div>
+        <div class="pic"><img src="screenshots/keygen.png" width="1384" height="861" alt="SSH-Key-Generator mit Public Key und Anleitung für den Linux-Server" loading="lazy"></div>
+      </div>
+
+      <div class="feature flip">
+        <div class="copy">
+          <h3>Einstellbar, wie du arbeitest</h3>
+          <p>Schriftgröße, Farbschema, Cursor, Verlauf, Keepalive, Startbildschirm – alles an einer Stelle. Mit <kbd>Strg</kbd>+<kbd>+</kbd> und <kbd>Strg</kbd>+<kbd>−</kbd> zoomst du direkt im Terminal.</p>
+          <ul>
+            <li>Fünf Farbschemata, auch ein helles</li>
+            <li>Sitzungen beim Start wiederherstellen</li>
+            <li>Sitzungen auf Wunsch als Textdatei mitschreiben</li>
+          </ul>
+        </div>
+        <div class="pic"><img src="screenshots/settings.png" width="1384" height="861" alt="Einstellungen: Darstellung, Farbschema und Verhalten des Terminals" loading="lazy"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Sicher und durchdacht</h2>
+      <p class="intro">Die Dinge, die man erst vermisst, wenn sie fehlen.</p>
+      <div class="grid">
+        <div><h4>Host-Key-Prüfung</h4><p>Neue Server zeigen ihren Fingerprint zur Bestätigung. Ändert er sich später, warnt NebulaSSH, bevor ein Passwort gesendet wird.</p></div>
+        <div><h4>Verschlüsselte Ablage</h4><p>Geräte und Keys liegen AES-256-verschlüsselt auf der Platte; der Schlüssel steckt in der Windows-Anmeldeinformationsverwaltung.</p></div>
+        <div><h4>App-Sperre</h4><p>Optionales Startpasswort (Argon2id), automatische Sperre nach Inaktivität – praktisch auf geteilten PCs.</p></div>
+        <div><h4>Backup &amp; Umzug</h4><p>Alles in eine passwortgeschützte <code>.nebula</code>-Datei exportieren und auf dem neuen PC wiederherstellen.</p></div>
+        <div><h4>Zwischenablage</h4><p>Kopierte Passwörter werden nach 30 Sekunden automatisch wieder aus der Zwischenablage entfernt.</p></div>
+        <div><h4>Broadcast</h4><p>Einen Befehl gleichzeitig an alle verbundenen Tabs senden – für mehrere Switches auf einmal.</p></div>
+        <div><h4>Auch alte Hardware</h4><p>Moderne Verschlüsselung zuerst, ältere Verfahren als abschaltbarer Rückfall. Keyboard-Interactive für Switches.</p></div>
+        <div><h4>Makros</h4><p>Häufige Befehle als Knopf in der Statusleiste – ein Klick schickt sie an den aktiven Tab.</p></div>
+        <div><h4>Automatische Updates</h4><p>Neue Versionen werden beim Start erkannt und mit einem Klick installiert – nur wenn sie digital signiert sind und die Prüfsumme stimmt.</p></div>
+        <div><h4>Suche &amp; Kopieren</h4><p><kbd>Strg</kbd>+<kbd>F</kbd> durchsucht den Verlauf. Markieren kopiert, Rechtsklick fügt ein.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="neu">
+    <div class="wrap v2">
+      <div>
+        <h2>Neu: komplett nativ, mit Auto-Update</h2>
+        <p class="intro" style="margin-bottom:24px">Version 1 lief mit Go und einer eingebetteten Browser-Oberfläche. Seit Version 2.1 ist NebulaSSH von Grund auf in Rust geschrieben: Terminal-Emulation, Oberfläche und SSH laufen in einem einzigen, schlanken Prozess.</p>
+        <p style="color:var(--muted)">Deine Geräte aus Version 1 lassen sich weiterverwenden – die verschlüsselten Dateien sind kompatibel.</p>
+      </div>
+      <table>
+        <caption>Gemessen auf demselben Windows-11-PC, App im Leerlauf</caption>
+        <thead><tr><th scope="col"></th><th scope="col">mit WebView</th><th scope="col">2.2 nativ</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Prozesse</th><td class="old">7</td><td class="new">1</td></tr>
+          <tr><th scope="row">Arbeitsspeicher</th><td class="old">339 MB</td><td class="new">136 MB</td></tr>
+          <tr><th scope="row">Installer</th><td class="old">–</td><td class="new">4,1 MB</td></tr>
+          <tr><th scope="row">Automatische Updates</th><td class="old">nein</td><td class="new">ja, signiert</td></tr>
+          <tr><th scope="row">Terminal-Durchsatz</th><td class="old">–</td><td class="new">43 MB/s</td></tr>
+          <tr><th scope="row">Benötigt WebView2</th><td class="old">ja</td><td class="new">nein</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="download">
+    <div class="wrap">
+      <h2>Herunterladen</h2>
+      <p class="intro">Der Installer legt NebulaSSH unter „Programme“ ab, mit Startmenü-Eintrag und sauberer Deinstallation über „Apps &amp; Features“.</p>
+      <div class="downloads">
+        <div class="dl main">
+          <h3>Installer</h3>
+          <p>Empfohlen. Installiert nach <code>C:\Program Files\NebulaSSH</code>, optional mit Desktop-Symbol. Deine Daten liegen im Benutzerprofil.</p>
+          <span class="size">NebulaSSH-Setup.exe · 4,1 MB · immer die neueste Version</span>
+          <a class="btn btn-primary" href="https://github.com/Zenutrix/NebulaSSH/releases/latest/download/NebulaSSH-Setup.exe">Installer laden</a>
+        </div>
+        <div class="dl">
+          <h3>Portable</h3>
+          <p>Eine einzelne EXE für den USB-Stick. Geräte und Einstellungen liegen im selben Ordner.</p>
+          <span class="size">NebulaSSH-portable.exe · 11,4 MB</span>
+          <a class="btn btn-ghost" href="https://github.com/Zenutrix/NebulaSSH/releases/latest/download/NebulaSSH-portable.exe">Portable laden</a>
+        </div>
+      </div>
+      <ol class="steps">
+        <li>Installer starten und der Windows-Abfrage zustimmen.</li>
+        <li>Links eine Verbindung eingeben und „Speichern“ klicken.</li>
+        <li>Optional: unter 🔑 einen SSH-Key erzeugen und hinterlegen.</li>
+      </ol>
+      <p class="req">Voraussetzung: Windows 10 oder 11, 64 Bit. Prüfsummen: <a href="https://github.com/Zenutrix/NebulaSSH/releases/latest/download/SHA256SUMS.txt">SHA256SUMS.txt</a></p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="#"><img src="icon.png" alt=""><strong>Nebula<span>SSH</span></strong></a>
+    <span>© 2026 Thomas Schöpf · <a href="https://github.com/Zenutrix/NebulaSSH">GitHub</a> · <a href="https://github.com/Zenutrix/NebulaSSH/releases">Alle Versionen</a></span>
+  </div>
+</footer>
+</body>
+</html>

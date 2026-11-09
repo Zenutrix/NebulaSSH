@@ -1,0 +1,27 @@
+[package]
+name = "nebula-core"
+version = "2.0.0"
+edition = "2021"
+description = "NebulaSSH Kern: SSH, SFTP, Serial, verschlüsselte Ablage"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "fs"] }
+russh = { version = "0.65", default-features = false, features = ["ring", "rsa", "flate2", "des"] }
+russh-sftp = "3"
+serialport = "4"
+aes-gcm = "0.10"
+base64 = "0.22"
+rand = "0.8"
+anyhow = "1"
+ssh-key = { version = "=0.7.0-rc.11", features = ["getrandom", "ed25519", "encryption", "rsa", "p256"] }
+argon2 = "0.5"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+zeroize = "1"
+ureq = { version = "3", features = ["win-system-proxy"] }
+ed25519-dalek = "2"
+sha2 = "0.10"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

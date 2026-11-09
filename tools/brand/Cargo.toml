@@ -1,0 +1,10 @@
+[package]
+name = "brand"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Erzeugt Icons und Installer-Grafiken aus branding/logo.svg"
+
+[dependencies]
+resvg = "0.45"
+image = { version = "0.25", default-features = false, features = ["png", "ico", "bmp"] }

@@ -1,3 +1,29 @@
-build/bin
-node_modules
-frontend/dist
+# Build-Ausgaben (Programme gehören in GitHub-Releases, nicht ins Repository)
+target/
+dist/
+**/node_modules/
+legacy-tauri/frontend/dist/
+legacy-tauri/src-tauri/target/
+legacy-tauri/src-tauri/gen/
+*.exe
+
+# Private Daten: Geräte, Keys, Sitzungen, Backups, Logs
+build/bin/
+legacy-go/build/bin/
+hosts.json
+keys.json
+sessions.json
+known_hosts.json
+settings.json
+*.nebula
+logs/
+*.key
+*.pem
+id_rsa*
+id_ed25519*
+
+# Lokale Werkzeug- und Editor-Ordner
+.claude/
+.vscode/
+.idea/
+*.log

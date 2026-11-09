@@ -1,0 +1,16 @@
+[package]
+name = "release"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Signierschlüssel verwalten und signierte update.json erzeugen"
+
+[dependencies]
+nebula-core = { path = "../../core" }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+base64 = "0.22"
+sha2 = "0.10"
+serde_json = "1"
+ureq = "3"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

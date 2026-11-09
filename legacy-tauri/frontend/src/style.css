@@ -1,0 +1,14 @@
+html {
+    background-color: #0f0f17;
+    color: white;
+}
+
+body {
+    margin: 0;
+    color: white;
+    font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+}
+
+#app {
+    height: 100vh;
+}
