@@ -2655,6 +2655,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "ed25519-dalek 2.2.0",
+ "pageant",
  "rand 0.8.8",
  "russh",
  "russh-sftp",
@@ -2671,7 +2672,7 @@ dependencies = [
 
 [[package]]
 name = "nebulassh"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "alacritty_terminal",
  "arboard",

@@ -1,5 +1,6 @@
 //! Serielle Verbindungen (COM-Ports).
 
+use crate::tf;
 use crate::{Cmd, Connection, Event, Sink};
 use std::io::{ErrorKind, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -40,8 +41,8 @@ pub fn connect(port_name: &str, baud: u32, sink: Sink) -> Result<Arc<SerialSessi
     let port = serialport::new(port_name, baud)
         .timeout(Duration::from_millis(20))
         .open()
-        .map_err(|e| format!("Serial Fehler: {e}"))?;
-    let mut reader = port.try_clone().map_err(|e| format!("Serial Fehler: {e}"))?;
+        .map_err(|e| tf!("Serial Fehler: {e}", "Serial error: {e}"))?;
+    let mut reader = port.try_clone().map_err(|e| tf!("Serial Fehler: {e}", "Serial error: {e}"))?;
     let mut writer = port;
 
     let (tx, rx) = mpsc::channel::<Cmd>();
@@ -84,7 +85,7 @@ pub fn connect(port_name: &str, baud: u32, sink: Sink) -> Result<Arc<SerialSessi
                 }
             }
             sess2.close();
-            sink(Event::Closed("[Port geschlossen]".into()));
+            sink(Event::Closed(crate::t!("[Port geschlossen]", "[Port closed]").into()));
         })
         .map_err(|e| e.to_string())?;
 

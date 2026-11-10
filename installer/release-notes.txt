@@ -1,4 +1,13 @@
-Automatische Updates mit Signaturprüfung (Ed25519) und SHA-256-Kontrolle
-Überarbeitete Oberfläche: Gerätekacheln mit Online-Status, neue Tab-Leiste, Schnellaktionen
-Datei-Explorer: klickbarer Pfad, farbige Symbole
-Toasts, Statusanzeige und Makros im neuen Design
+Port-Weiterleitung: lokale (-L), Remote- (-R) und SOCKS-Tunnel (-D), pro Gerät speicherbar
+Jump-Host (ProxyJump): über einen Zwischenserver ins interne Netz verbinden
+SSH-Agent: Anmeldung mit Pageant, Windows-OpenSSH-Agent, 1Password oder KeePassXC, inkl. Agent-Weiterleitung
+Import aus PuTTY, MobaXterm und ~/.ssh/config
+Geteilte Ansicht mit bis zu vier Terminals; Tabs per Ziehen in ein eigenes Fenster
+Snippet-Bibliothek mit Platzhaltern und Suche (Strg+Umschalt+P)
+SFTP: Ordner vergleichen und synchronisieren, Übertragungen pausieren, abbrechen und fortsetzen, Ordner herunterladen
+CPU, RAM und Festplatte des Servers in der Statusleiste
+Wake-on-LAN, Ping und Port-Prüfung für gespeicherte Geräte
+Telnet für ältere Switches und Router
+X11-Weiterleitung für grafische Linux-Programme
+Oberfläche auf Deutsch und Englisch
+Fehler behoben: Strg+Q (und Strg+Alt+Q für @) hat die App ohne Nachfrage beendet

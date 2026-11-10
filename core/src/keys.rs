@@ -1,5 +1,6 @@
 //! SSH-Schlüssel erzeugen, prüfen und exportieren.
 
+use crate::{t, tf};
 use ssh_key::{
     getrandom::SysRng, rand_core::UnwrapErr, Algorithm, EcdsaCurve, HashAlg, LineEnding, PrivateKey,
 };
@@ -14,8 +15,8 @@ pub enum KeyType {
 impl KeyType {
     pub fn label(self) -> &'static str {
         match self {
-            KeyType::Ed25519 => "Ed25519 (empfohlen)",
-            KeyType::Rsa4096 => "RSA 4096 (für alte Geräte)",
+            KeyType::Ed25519 => t!("Ed25519 (empfohlen)", "Ed25519 (recommended)"),
+            KeyType::Rsa4096 => t!("RSA 4096 (für alte Geräte)", "RSA 4096 (for old devices)"),
             KeyType::EcdsaP256 => "ECDSA P-256",
         }
     }
@@ -44,7 +45,7 @@ pub fn generate(kind: KeyType, comment: &str, passphrase: &str) -> Result<Genera
             PrivateKey::new(ssh_key::private::KeypairData::Rsa(kp), comment)
         }
     }
-    .map_err(|e| format!("Schlüssel konnte nicht erzeugt werden: {e}"))?;
+    .map_err(|e| tf!("Schlüssel konnte nicht erzeugt werden: {e}", "Could not generate the key: {e}"))?;
     key.set_comment(comment);
     let public_line = key.public_key().to_openssh().map_err(|e| e.to_string())?;
     let fingerprint = key.fingerprint(HashAlg::Sha256).to_string();
@@ -72,7 +73,7 @@ pub fn public_from_private(pem: &str) -> Result<(String, String), String> {
         return Ok((line, k.public_key().fingerprint(HashAlg::Sha256).to_string()));
     }
     // PEM/PKCS#8 (z.B. "BEGIN RSA PRIVATE KEY") über russh einlesen
-    let k = russh::keys::decode_secret_key(pem, None).map_err(|e| format!("Key nicht lesbar: {e}"))?;
+    let k = russh::keys::decode_secret_key(pem, None).map_err(|e| tf!("Key nicht lesbar: {e}", "Cannot read key: {e}"))?;
     let pk = k.public_key();
     let line = pk.to_openssh().map_err(|e| e.to_string())?;
     Ok((
@@ -90,7 +91,7 @@ pub fn is_encrypted(pem: &str) -> bool {
 
 /// Anleitung zum Hinterlegen des Public Keys auf einem Linux-Server.
 pub fn install_instructions(public_line: &str) -> String {
-    format!(
+    tf!(
         "# 1) Auf dem Linux-Server als gewünschter Benutzer anmelden\n\
          # 2) Diese Befehle ausführen:\n\
          mkdir -p ~/.ssh && chmod 700 ~/.ssh\n\
@@ -98,7 +99,15 @@ pub fn install_instructions(public_line: &str) -> String {
          chmod 600 ~/.ssh/authorized_keys\n\
          \n\
          # Alternativ von einem Linux/macOS-Rechner aus:\n\
-         # ssh-copy-id -i schluessel.pub benutzer@server\n"
+         # ssh-copy-id -i schluessel.pub benutzer@server\n",
+        "# 1) Log in to the Linux server as the desired user\n\
+         # 2) Run these commands:\n\
+         mkdir -p ~/.ssh && chmod 700 ~/.ssh\n\
+         echo '{public_line}' >> ~/.ssh/authorized_keys\n\
+         chmod 600 ~/.ssh/authorized_keys\n\
+         \n\
+         # Alternatively from a Linux/macOS machine:\n\
+         # ssh-copy-id -i key.pub user@server\n"
     )
 }
 

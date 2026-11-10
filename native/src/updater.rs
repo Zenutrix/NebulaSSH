@@ -3,6 +3,7 @@
 use crate::app::*;
 use eframe::egui::{self, vec2, Align, Color32, Layout, RichText, Ui};
 use nebula_core::update::{self, DownloadProgress, Release};
+use nebula_core::{t, tf};
 use rfd::MessageLevel;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -37,7 +38,7 @@ impl App {
         let url = update_url(&self.prefs);
         if url.is_empty() {
             if manual {
-                self.update = UpdateState::Error("Keine Update-Adresse eingestellt.".into());
+                self.update = UpdateState::Error(t!("Keine Update-Adresse eingestellt.", "No update address configured.").into());
             }
             return;
         }
@@ -69,7 +70,7 @@ impl App {
             Ok(None) => {
                 self.update = UpdateState::UpToDate(Instant::now());
                 if manual {
-                    self.notify(format!("NebulaSSH {VERSION} ist aktuell."));
+                    self.notify(tf!("NebulaSSH {VERSION} ist aktuell.", "NebulaSSH {VERSION} is up to date."));
                 }
             }
             Err(e) => {
@@ -141,7 +142,7 @@ impl App {
     /// Kleiner Hinweis in der Statusleiste.
     pub fn update_badge(&mut self, ui: &mut Ui) {
         let label = match &self.update {
-            UpdateState::Available(r) => format!("⬆ Update {} verfügbar", r.version),
+            UpdateState::Available(r) => tf!("⬆ Update {} verfügbar", "⬆ Update {} available", r.version),
             UpdateState::Downloading { progress, .. } => {
                 let total = progress.total.load(Ordering::Relaxed).max(1);
                 let pct = progress.done.load(Ordering::Relaxed) * 100 / total;
@@ -151,7 +152,7 @@ impl App {
             _ => return,
         };
         let b = egui::Button::new(RichText::new(label).strong().color(Color32::BLACK)).fill(AMBER);
-        if ui.add(b).on_hover_text("Details und Installation").clicked() {
+        if ui.add(b).on_hover_text(t!("Details und Installation", "Details and installation")).clicked() {
             self.dialog = Some(Dialog::Update);
         }
     }
@@ -166,16 +167,16 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.add(egui::Image::new(&self.logo).fit_to_exact_size(vec2(48.0, 48.0)));
                     ui.vertical(|ui| {
-                        ui.label(RichText::new(format!("NebulaSSH {} ist verfügbar", r.version)).size(19.0).strong().color(Color32::WHITE));
-                        ui.label(RichText::new(format!("Installiert: {VERSION}  ·  veröffentlicht am {}", r.date)).color(MUTED));
+                        ui.label(RichText::new(tf!("NebulaSSH {} ist verfügbar", "NebulaSSH {} is available", r.version)).size(19.0).strong().color(Color32::WHITE));
+                        ui.label(RichText::new(tf!("Installiert: {VERSION}  ·  veröffentlicht am {}", "Installed: {VERSION}  ·  released on {}", r.date)).color(MUTED));
                     });
                 });
                 if r.critical {
                     ui.add_space(8.0);
-                    ui.label(RichText::new("⚠ Wichtiges Sicherheitsupdate – bitte zeitnah installieren.").color(AMBER).strong());
+                    ui.label(RichText::new(t!("⚠ Wichtiges Sicherheitsupdate – bitte zeitnah installieren.", "⚠ Important security update – please install soon.")).color(AMBER).strong());
                 }
                 ui.add_space(12.0);
-                ui.label(RichText::new("Neu in dieser Version").color(MUTED).strong().size(12.5));
+                ui.label(RichText::new(t!("Neu in dieser Version", "New in this version")).color(MUTED).strong().size(12.5));
                 egui::Frame::new().fill(BG).corner_radius(8).inner_margin(12).show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
@@ -193,9 +194,9 @@ impl App {
                 let size = if installed { r.installer.size } else { r.portable.size };
                 ui.label(
                     RichText::new(if installed {
-                        format!("Der Installer ({}) wird geladen, geprüft und mit Administratorrechten gestartet. NebulaSSH startet danach automatisch neu.", human_size(size))
+                        tf!("Der Installer ({}) wird geladen, geprüft und mit Administratorrechten gestartet. NebulaSSH startet danach automatisch neu.", "The installer ({}) is downloaded, verified and started with administrator rights. NebulaSSH restarts automatically afterwards.", human_size(size))
                     } else {
-                        format!("Die neue Version ({}) wird geladen, geprüft und ersetzt diese portable EXE. NebulaSSH startet danach neu.", human_size(size))
+                        tf!("Die neue Version ({}) wird geladen, geprüft und ersetzt diese portable EXE. NebulaSSH startet danach neu.", "The new version ({}) is downloaded, verified and replaces this portable EXE. NebulaSSH restarts afterwards.", human_size(size))
                     })
                     .size(12.5)
                     .color(MUTED),
@@ -208,28 +209,28 @@ impl App {
                     ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
                     ui.add_space(10.0);
                     ui.horizontal(|ui| {
-                        if ui.button("Abbrechen").clicked() {
+                        if ui.button(t!("Abbrechen", "Cancel")).clicked() {
                             progress.cancel.store(true, Ordering::Relaxed);
                         }
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if ui.button("Im Hintergrund").clicked() {
+                            if ui.button(t!("Im Hintergrund", "In background")).clicked() {
                                 action = Some(3);
                             }
                         });
                     });
                 } else {
                     ui.horizontal(|ui| {
-                        if ui.button("Diese Version überspringen").clicked() {
+                        if ui.button(t!("Diese Version überspringen", "Skip this version")).clicked() {
                             action = Some(2);
                         }
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if ui
-                                .add(egui::Button::new(RichText::new("Jetzt aktualisieren").strong().color(Color32::WHITE)).fill(ACCENT).min_size(vec2(170.0, 34.0)))
+                                .add(egui::Button::new(RichText::new(t!("Jetzt aktualisieren", "Update now")).strong().color(Color32::WHITE)).fill(ACCENT).min_size(vec2(170.0, 34.0)))
                                 .clicked()
                             {
                                 action = Some(1);
                             }
-                            if ui.add(egui::Button::new("Später").min_size(vec2(90.0, 34.0))).clicked() {
+                            if ui.add(egui::Button::new(t!("Später", "Later")).min_size(vec2(90.0, 34.0))).clicked() {
                                 action = Some(3);
                             }
                         });
@@ -237,8 +238,8 @@ impl App {
                 }
             }
             _ => {
-                ui.label("Kein Update verfügbar.");
-                if ui.button("Schließen").clicked() {
+                ui.label(t!("Kein Update verfügbar.", "No update available."));
+                if ui.button(t!("Schließen", "Close")).clicked() {
                     action = Some(3);
                 }
             }
@@ -249,8 +250,11 @@ impl App {
                     let open = self.tabs.iter().filter(|t| t.status == Status::Connected).count();
                     let ok = open == 0
                         || confirm(
-                            "Update installieren",
-                            &format!("{open} Verbindung(en) sind noch offen und werden beim Neustart getrennt.\n\nJetzt aktualisieren?"),
+                            t!("Update installieren", "Install update"),
+                            &tf!(
+                                "{open} Verbindung(en) sind noch offen und werden beim Neustart getrennt.\n\nJetzt aktualisieren?",
+                                "{open} connection(s) are still open and will be closed on restart.\n\nUpdate now?"
+                            ),
                             MessageLevel::Info,
                         );
                     if ok {
@@ -282,10 +286,10 @@ impl App {
         ui.separator();
         ui.add_space(8.0);
         ui.label(RichText::new("Updates").size(12.0).color(MUTED).strong());
-        ui.checkbox(&mut prefs.update_check, "Beim Start automatisch nach Updates suchen");
+        ui.checkbox(&mut prefs.update_check, t!("Beim Start automatisch nach Updates suchen", "Check for updates on start"));
         ui.horizontal(|ui| {
             let busy = matches!(self.update, UpdateState::Checking { .. } | UpdateState::Downloading { .. });
-            if ui.add_enabled(!busy, egui::Button::new("Jetzt nach Updates suchen")).clicked() {
+            if ui.add_enabled(!busy, egui::Button::new(t!("Jetzt nach Updates suchen", "Check for updates now"))).clicked() {
                 // Geänderte Adresse sofort verwenden
                 self.prefs.update_url = prefs.update_url.clone();
                 self.check_updates(true);
@@ -293,13 +297,13 @@ impl App {
             match &self.update {
                 UpdateState::Checking { .. } => {
                     ui.spinner();
-                    ui.label(RichText::new("Suche…").color(MUTED));
+                    ui.label(RichText::new(t!("Suche…", "Checking…")).color(MUTED));
                 }
                 UpdateState::UpToDate(_) => {
-                    ui.label(RichText::new(format!("✔ Version {VERSION} ist aktuell")).color(GREEN));
+                    ui.label(RichText::new(tf!("✔ Version {VERSION} ist aktuell", "✔ Version {VERSION} is up to date")).color(GREEN));
                 }
                 UpdateState::Available(r) => {
-                    ui.label(RichText::new(format!("Version {} verfügbar", r.version)).color(AMBER));
+                    ui.label(RichText::new(tf!("Version {} verfügbar", "Version {} available", r.version)).color(AMBER));
                 }
                 UpdateState::Error(e) => {
                     ui.label(RichText::new(format!("✖ {e}")).color(RED).size(12.0));
@@ -307,11 +311,11 @@ impl App {
                 _ => {}
             }
         });
-        egui::CollapsingHeader::new(RichText::new("Erweitert").size(12.5)).id_salt("upd_adv").show(ui, |ui| {
-            ui.label(RichText::new("Update-Adresse (leer = Standard)").size(12.0).color(MUTED));
+        egui::CollapsingHeader::new(RichText::new(t!("Erweitert", "Advanced")).size(12.5)).id_salt("upd_adv").show(ui, |ui| {
+            ui.label(RichText::new(t!("Update-Adresse (leer = Standard)", "Update address (empty = default)")).size(12.0).color(MUTED));
             let hint = DEFAULT_URL.trim();
             ui.add(egui::TextEdit::singleline(&mut prefs.update_url).hint_text(if hint.is_empty() { "https://…/update.json" } else { hint }).desired_width(f32::INFINITY));
-            ui.label(RichText::new("Updates werden nur installiert, wenn sie mit dem Signierschlüssel von Thomas Schöpf signiert sind.").size(11.5).color(MUTED));
+            ui.label(RichText::new(t!("Updates werden nur installiert, wenn sie mit dem Signierschlüssel von Thomas Schöpf signiert sind.", "Updates are only installed if they are signed with Thomas Schöpf's signing key.")).size(11.5).color(MUTED));
         });
     }
 }

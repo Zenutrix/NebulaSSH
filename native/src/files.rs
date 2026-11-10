@@ -1,12 +1,16 @@
-//! SFTP-Datei-Explorer: Liste mit Spalten, Navigation, Drag & Drop, Übertragungen.
+//! SFTP-Datei-Explorer: Liste mit Spalten, Navigation, Drag & Drop und Übertragungs-Warteschlange
+//! (pausieren, fortsetzen, abbrechen, wiederholen).
 
 use crate::app::*;
 use crate::sidebar::icon_button;
 use eframe::egui::{self, pos2, vec2, Align, Align2, Color32, FontId, Layout, RichText, Sense, Stroke, TextEdit, Ui};
-use nebula_core::ssh::{self, join, FileInfo};
+use nebula_core::ssh::{self, join, Ctl, FileInfo};
+use nebula_core::{t, tf};
 use rfd::MessageLevel;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::time::Instant;
 
 enum A {
     Open(FileInfo),
@@ -26,8 +30,61 @@ enum A {
     UploadDir,
     MkDir,
     NewFile,
+    Sync,
     Sort(SortBy),
     Close,
+}
+
+/// Was übertragen wird
+#[derive(Clone)]
+pub enum Job {
+    /// Datei oder Ordner in einen Server-Ordner hochladen
+    Upload { local: PathBuf, remote_dir: String },
+    /// Eine Datei an genau diesen Server-Pfad (Synchronisieren)
+    UploadTo { local: PathBuf, remote: String },
+    /// Datei herunterladen
+    Download { remote: String, local: PathBuf },
+    /// Ganzen Ordner herunterladen (nach local_parent/<name>)
+    DownloadDir { remote: String, local_parent: PathBuf },
+}
+
+impl Job {
+    pub fn is_upload(&self) -> bool {
+        matches!(self, Job::Upload { .. } | Job::UploadTo { .. })
+    }
+    fn can_resume(&self) -> bool {
+        matches!(self, Job::UploadTo { .. } | Job::Download { .. }) || matches!(self, Job::Upload { local, .. } if local.is_file())
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub enum TransferState {
+    Queued,
+    Running,
+    Done(Instant),
+    Failed(String),
+    Cancelled,
+}
+
+pub struct Transfer {
+    pub id: u64,
+    pub tab: u64,
+    pub label: String,
+    pub total: u64,
+    pub ctl: Arc<Ctl>,
+    pub state: TransferState,
+    pub job: Job,
+    pub resume: bool,
+    pub task: Option<tokio::task::AbortHandle>,
+}
+
+impl Transfer {
+    pub fn is_active(&self) -> bool {
+        matches!(self.state, TransferState::Queued | TransferState::Running)
+    }
+    fn paused(&self) -> bool {
+        self.ctl.paused.load(Ordering::Relaxed)
+    }
 }
 
 fn parent(path: &str) -> String {
@@ -39,7 +96,7 @@ fn parent(path: &str) -> String {
 fn fmt_time(ts: Option<u32>) -> String {
     use chrono::TimeZone;
     match ts.and_then(|t| chrono::Local.timestamp_opt(t as i64, 0).single()) {
-        Some(d) => d.format("%d.%m.%Y %H:%M").to_string(),
+        Some(d) => d.format(if nebula_core::i18n::english() { "%Y-%m-%d %H:%M" } else { "%d.%m.%Y %H:%M" }).to_string(),
         None => String::new(),
     }
 }
@@ -116,14 +173,13 @@ impl App {
                 t.sftp.selected = None;
             }
             Err(e) => {
-                // Pfad zurücksetzen, Fehler anzeigen
                 t.sftp.path_edit = t.sftp.path.clone();
                 t.sftp.error = Some(e);
             }
         }
     }
 
-    pub fn sftp_op<F, Fut>(&mut self, id: u64, what: &'static str, f: F)
+    pub fn sftp_op<F, Fut>(&mut self, id: u64, what: String, f: F)
     where
         F: FnOnce(Arc<ssh::SshSession>) -> Fut + Send + 'static,
         Fut: std::future::Future<Output = Result<(), String>> + Send,
@@ -131,7 +187,7 @@ impl App {
         let tx = self.tx.clone();
         let ctx = self.ctx.clone();
         let Some(s) = self.tab(id).and_then(|t| t.ssh.clone()) else {
-            alert("Dateien", "Keine aktive SSH-Verbindung.");
+            alert(t!("Dateien", "Files"), t!("Keine aktive SSH-Verbindung.", "No active SSH connection."));
             return;
         };
         self.rt.spawn(async move {
@@ -141,65 +197,141 @@ impl App {
         });
     }
 
-    /// Startet einen Upload (Datei oder Ordner) mit Fortschrittsanzeige.
-    pub fn start_upload(&mut self, id: u64, local: std::path::PathBuf, remote_dir: String) {
-        let Some(s) = self.tab(id).and_then(|t| t.ssh.clone()) else { return };
-        let local_s = local.to_string_lossy().to_string();
-        let name = local.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        let done = Arc::new(AtomicU64::new(0));
-        let tid = self.next_transfer_id();
+    // ------------------------------------------------------------------
+    // Übertragungen (Warteschlange)
+    // ------------------------------------------------------------------
+
+    /// Stellt eine Übertragung in die Warteschlange.
+    pub fn queue(&mut self, tab: u64, job: Job) {
+        let (label, total) = match &job {
+            Job::Upload { local, .. } => (
+                local.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+                ssh::local_size(&local.to_string_lossy()),
+            ),
+            Job::UploadTo { local, remote } => (remote.rsplit('/').next().unwrap_or("").to_string(), ssh::local_size(&local.to_string_lossy())),
+            Job::Download { remote, .. } => (remote.rsplit('/').next().unwrap_or("").to_string(), 0),
+            Job::DownloadDir { remote, .. } => (format!("{}/", remote.trim_end_matches('/').rsplit('/').next().unwrap_or("")), 0),
+        };
+        let id = self.transfers.iter().map(|t| t.id).max().unwrap_or(0) + 1;
         self.transfers.push(Transfer {
-            id: tid,
-            label: name,
-            upload: true,
-            total: ssh::local_size(&local_s),
-            done: done.clone(),
-            state: TransferState::Running,
-        });
-        let tx = self.tx.clone();
-        let ctx = self.ctx.clone();
-        self.rt.spawn(async move {
-            let res = ssh::upload_with(&s, &remote_dir, &local_s, Some(done)).await;
-            let _ = tx.send(Msg::TransferDone(tid, id, res));
-            ctx.request_repaint();
+            id,
+            tab,
+            label,
+            total,
+            ctl: Arc::new(Ctl::default()),
+            state: TransferState::Queued,
+            job,
+            resume: false,
+            task: None,
         });
     }
 
-    fn start_download(&mut self, id: u64, remote: String, size: u64, local: std::path::PathBuf) {
-        let Some(s) = self.tab(id).and_then(|t| t.ssh.clone()) else { return };
-        let name = remote.rsplit('/').next().unwrap_or("").to_string();
-        let done = Arc::new(AtomicU64::new(0));
-        let tid = self.next_transfer_id();
-        self.transfers.push(Transfer {
-            id: tid,
-            label: name,
-            upload: false,
-            total: size,
-            done: done.clone(),
-            state: TransferState::Running,
-        });
-        let tx = self.tx.clone();
-        let ctx = self.ctx.clone();
-        let local_s = local.to_string_lossy().to_string();
-        self.rt.spawn(async move {
-            let res = ssh::download_with(&s, &remote, &local_s, Some(done)).await;
-            let _ = tx.send(Msg::TransferDone(tid, id, res));
-            ctx.request_repaint();
-        });
+    /// Startet wartende Übertragungen (begrenzt auf `parallel_transfers`).
+    pub fn pump_transfers(&mut self) {
+        let max = self.prefs.parallel_transfers.clamp(1, 8);
+        loop {
+            let running = self.transfers.iter().filter(|t| t.state == TransferState::Running).count();
+            if running >= max {
+                return;
+            }
+            let Some(i) = self.transfers.iter().position(|t| t.state == TransferState::Queued) else { return };
+            let tab = self.transfers[i].tab;
+            let Some(s) = self.tabs.iter().find(|t| t.id == tab).and_then(|t| t.ssh.clone()) else {
+                self.transfers[i].state = TransferState::Failed(t!("Keine SSH-Verbindung", "No SSH connection").into());
+                continue;
+            };
+            let tr = &mut self.transfers[i];
+            tr.state = TransferState::Running;
+            let (tid, job, ctl, resume) = (tr.id, tr.job.clone(), tr.ctl.clone(), tr.resume);
+            let tx = self.tx.clone();
+            let ctx = self.ctx.clone();
+            let handle = self.rt.spawn(async move {
+                let p = Some(ctl);
+                let res = match job {
+                    Job::Upload { local, remote_dir } => {
+                        if resume && local.is_file() {
+                            let name = local.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                            ssh::upload_to(&s, &local.to_string_lossy(), &join(&remote_dir, &name), p, true).await
+                        } else {
+                            ssh::upload_with(&s, &remote_dir, &local.to_string_lossy(), p).await
+                        }
+                    }
+                    Job::UploadTo { local, remote } => {
+                        let _ = ssh::mkdir_all(&s, &parent(&remote)).await;
+                        ssh::upload_to(&s, &local.to_string_lossy(), &remote, p, resume).await
+                    }
+                    Job::Download { remote, local } => {
+                        if let Some(d) = local.parent() {
+                            let _ = std::fs::create_dir_all(d);
+                        }
+                        ssh::download_with(&s, &remote, &local.to_string_lossy(), p, resume).await
+                    }
+                    Job::DownloadDir { remote, local_parent } => {
+                        let size = ssh::remote_size(&s, &remote).await;
+                        let _ = tx.send(Msg::TransferSize(tid, size));
+                        ssh::download_tree(&s, &remote, &local_parent, p).await
+                    }
+                };
+                let _ = tx.send(Msg::TransferDone(tid, tab, res));
+                ctx.request_repaint();
+            });
+            self.transfers[i].task = Some(handle.abort_handle());
+        }
+    }
+
+    pub fn on_transfer_done(&mut self, tid: u64, tab: u64, res: Result<(), String>) {
+        let ok = res.is_ok();
+        if let Some(t) = self.transfers.iter_mut().find(|t| t.id == tid) {
+            t.task = None;
+            t.state = match res {
+                Ok(()) => {
+                    if t.total == 0 {
+                        t.total = t.ctl.done.load(Ordering::Relaxed);
+                    }
+                    TransferState::Done(Instant::now())
+                }
+                Err(e) if e == ssh::CANCELLED => TransferState::Cancelled,
+                Err(e) => TransferState::Failed(e),
+            };
+        }
+        if ok && !self.transfers.iter().any(|t| t.tab == tab && t.is_active()) {
+            self.reload_dir(tab);
+        }
+    }
+
+    fn transfer_action(&mut self, id: u64, action: &str) {
+        let Some(t) = self.transfers.iter_mut().find(|t| t.id == id) else { return };
+        match action {
+            "pause" => {
+                let p = !t.paused();
+                t.ctl.paused.store(p, Ordering::Relaxed);
+            }
+            "cancel" => {
+                t.ctl.cancel.store(true, Ordering::Relaxed);
+                t.ctl.paused.store(false, Ordering::Relaxed);
+                if t.state == TransferState::Queued {
+                    t.state = TransferState::Cancelled;
+                }
+            }
+            "retry" => {
+                // Fortsetzen, wo es aufgehört hat (sofern möglich)
+                t.resume = t.job.can_resume();
+                t.ctl = Arc::new(Ctl::default());
+                t.state = TransferState::Queued;
+            }
+            "remove" => {
+                let id = t.id;
+                self.transfers.retain(|x| x.id != id);
+            }
+            _ => {}
+        }
     }
 
     pub fn open_editor(&mut self, id: u64, path: String, new_file: bool) {
         let tx = self.tx.clone();
         let ctx = self.ctx.clone();
         let Some(s) = self.tab(id).and_then(|t| t.ssh.clone()) else { return };
-        self.dialog = Some(Dialog::Editor {
-            tab: id,
-            path: path.clone(),
-            content: String::new(),
-            original: String::new(),
-            loading: !new_file,
-            saving: false,
-        });
+        self.dialog = Some(Dialog::Editor { tab: id, path: path.clone(), content: String::new(), original: String::new(), loading: !new_file, saving: false });
         if !new_file {
             self.rt.spawn(async move {
                 let res = ssh::read_file(&s, &path).await;
@@ -212,9 +344,7 @@ impl App {
     /// Dateien aus dem Windows-Explorer ins Fenster gezogen.
     pub fn drop_files(&mut self, ui: &mut Ui) {
         let (hovering, dropped) = ui.input(|i| (!i.raw.hovered_files.is_empty(), i.raw.dropped_files.clone()));
-        let target = self
-            .active
-            .filter(|id| self.tabs.iter().any(|t| t.id == *id && t.ssh.is_some()));
+        let target = self.active.filter(|id| self.tabs.iter().any(|t| t.id == *id && t.ssh.is_some()));
         if hovering {
             let rect = ui.ctx().content_rect();
             let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("dnd")));
@@ -223,9 +353,10 @@ impl App {
             let text = match target {
                 Some(id) => {
                     let dir = self.tabs.iter().find(|t| t.id == id).map(|t| t.sftp.path.clone()).unwrap_or_default();
-                    format!("⬆  Loslassen zum Hochladen nach\n{}", if dir.is_empty() { "Home-Verzeichnis".into() } else { dir })
+                    let dir = if dir.is_empty() { t!("Home-Verzeichnis", "home directory").to_string() } else { dir };
+                    tf!("⬆  Loslassen zum Hochladen nach\n{dir}", "⬆  Drop to upload to\n{dir}")
                 }
-                None => "Zum Hochladen zuerst eine SSH-Verbindung öffnen".into(),
+                None => t!("Zum Hochladen zuerst eine SSH-Verbindung öffnen", "Open an SSH connection first to upload").into(),
             };
             painter.text(rect.center(), Align2::CENTER_CENTER, text, FontId::proportional(22.0), Color32::WHITE);
         }
@@ -233,7 +364,7 @@ impl App {
             return;
         }
         let Some(id) = target else {
-            self.notify_err("Kein SSH-Tab aktiv – Upload nicht möglich");
+            self.notify_err(t!("Kein SSH-Tab aktiv – Upload nicht möglich", "No SSH tab active – cannot upload"));
             return;
         };
         if !self.show_files {
@@ -244,7 +375,7 @@ impl App {
         for f in dropped {
             let p = f.path();
             if !p.as_os_str().is_empty() {
-                self.start_upload(id, p.to_path_buf(), dir.clone());
+                self.queue(id, Job::Upload { local: p.to_path_buf(), remote_dir: dir.clone() });
             }
         }
     }
@@ -255,13 +386,12 @@ impl App {
         let Some(t) = self.tabs.iter_mut().find(|t| t.id == id) else { return };
         let connected = t.ssh.is_some();
 
-        // Kopf
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.label(RichText::new("📂 Dateien").strong().size(15.0).color(Color32::WHITE));
+            ui.label(RichText::new(t!("📂 Dateien", "📂 Files")).strong().size(15.0).color(Color32::WHITE));
             ui.label(RichText::new(t.host.subtitle()).size(12.0).color(MUTED));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.add(egui::Button::new(RichText::new("✖").color(MUTED)).frame(false)).on_hover_text("Schließen").clicked() {
+                if ui.add(egui::Button::new(RichText::new("✖").color(MUTED)).frame(false)).on_hover_text(t!("Schließen", "Close")).clicked() {
                     act = Some(A::Close);
                 }
             });
@@ -270,7 +400,7 @@ impl App {
         if !connected {
             ui.add_space(20.0);
             ui.vertical_centered(|ui| {
-                ui.label(RichText::new("Keine Verbindung – Dateien sind erst nach dem Verbinden verfügbar.").color(MUTED));
+                ui.label(RichText::new(t!("Keine Verbindung – Dateien sind erst nach dem Verbinden verfügbar.", "Not connected – files are available after connecting.")).color(MUTED));
             });
             if let Some(A::Close) = act {
                 self.show_files = false;
@@ -281,13 +411,18 @@ impl App {
         // Navigation
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            if ui.add_enabled_ui(!t.sftp.history.is_empty(), |ui| ui.add_sized(vec2(32.0, 28.0), egui::Button::new("⬅"))).inner.on_hover_text("Zurück").clicked() {
+            if ui
+                .add_enabled_ui(!t.sftp.history.is_empty(), |ui| ui.add_sized(vec2(32.0, 28.0), egui::Button::new("⬅")))
+                .inner
+                .on_hover_text(t!("Zurück", "Back"))
+                .clicked()
+            {
                 act = Some(A::Back);
             }
-            if icon_button(ui, "⬆", "Übergeordneter Ordner").clicked() {
+            if icon_button(ui, "⬆", t!("Übergeordneter Ordner", "Parent folder")).clicked() {
                 act = Some(A::Up);
             }
-            if icon_button(ui, "🏠", "Home-Verzeichnis").clicked() {
+            if icon_button(ui, "🏠", t!("Home-Verzeichnis", "Home directory")).clicked() {
                 act = Some(A::Home);
             }
             let w = crate::sidebar::fill_width(ui, 2);
@@ -303,7 +438,6 @@ impl App {
                     t.sftp.editing_path = false;
                 }
             } else {
-                // Klickbare Pfad-Teile ("Brotkrumen")
                 let path = t.sftp.path.clone();
                 egui::Frame::new().fill(FIELD).corner_radius(6).inner_margin(egui::Margin::symmetric(4, 0)).show(ui, |ui| {
                     ui.set_width(w - 8.0);
@@ -316,9 +450,7 @@ impl App {
                         .show(ui, |ui| {
                             ui.horizontal_centered(|ui| {
                                 ui.spacing_mut().item_spacing.x = 0.0;
-                                let crumb = |ui: &mut Ui, text: &str| {
-                                    ui.add(egui::Button::new(RichText::new(text).size(13.0).color(Color32::from_gray(225))).frame_when_inactive(false))
-                                };
+                                let crumb = |ui: &mut Ui, text: &str| ui.add(egui::Button::new(RichText::new(text).size(13.0).color(Color32::from_gray(225))).frame_when_inactive(false));
                                 if crumb(ui, "/").clicked() {
                                     act = Some(A::Go("/".into()));
                                 }
@@ -335,33 +467,35 @@ impl App {
                         });
                 });
             }
-            if icon_button(ui, "✎", "Pfad eingeben").clicked() {
+            if icon_button(ui, "✎", t!("Pfad eingeben", "Enter path")).clicked() {
                 t.sftp.editing_path = !t.sftp.editing_path;
                 t.sftp.path_edit = t.sftp.path.clone();
             }
-            if icon_button(ui, "⟳", "Aktualisieren").clicked() {
+            if icon_button(ui, "⟳", t!("Aktualisieren", "Refresh")).clicked() {
                 act = Some(A::Reload);
             }
         });
-        // Aktionen
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            if ui.button("⬆ Hochladen").on_hover_text("Dateien hochladen – oder einfach ins Fenster ziehen").clicked() {
+            if ui.button(t!("⬆ Hochladen", "⬆ Upload")).on_hover_text(t!("Dateien hochladen – oder einfach ins Fenster ziehen", "Upload files – or just drag them into the window")).clicked() {
                 act = Some(A::Upload);
             }
-            if ui.button("⬆ Ordner").on_hover_text("Ganzen Ordner hochladen").clicked() {
+            if ui.button(t!("⬆ Ordner", "⬆ Folder")).on_hover_text(t!("Ganzen Ordner hochladen", "Upload a whole folder")).clicked() {
                 act = Some(A::UploadDir);
             }
-            if ui.button("+ Ordner").on_hover_text("Neuer Ordner").clicked() {
+            if ui.button(t!("+ Ordner", "+ Folder")).on_hover_text(t!("Neuer Ordner", "New folder")).clicked() {
                 act = Some(A::MkDir);
             }
-            if ui.button("+ Datei").clicked() {
+            if ui.button(t!("+ Datei", "+ File")).clicked() {
                 act = Some(A::NewFile);
+            }
+            if ui.button(t!("⇅ Vergleichen", "⇅ Compare")).on_hover_text(t!("Diesen Ordner mit einem lokalen Ordner vergleichen und synchronisieren", "Compare and sync this folder with a local folder")).clicked() {
+                act = Some(A::Sync);
             }
         });
         ui.horizontal(|ui| {
-            ui.checkbox(&mut t.sftp.show_hidden, "Versteckte").on_hover_text("Dateien mit . am Anfang anzeigen");
-            ui.add(TextEdit::singleline(&mut t.sftp.filter).hint_text("🔍 Filter").desired_width(ui.available_width()));
+            ui.checkbox(&mut t.sftp.show_hidden, t!("Versteckte", "Hidden")).on_hover_text(t!("Dateien mit . am Anfang anzeigen", "Show files starting with ."));
+            ui.add(TextEdit::singleline(&mut t.sftp.filter).hint_text(t!("🔍 Filter", "🔍 Filter")).desired_width(ui.available_width()));
         });
         if let Some(e) = &t.sftp.error {
             ui.label(RichText::new(format!("⚠ {e}")).color(RED).size(12.0));
@@ -372,19 +506,13 @@ impl App {
         let w = ui.available_width();
         let cols = [w * 0.50, w * 0.16, w * 0.34];
         let header = ui.allocate_exact_size(vec2(w, 22.0), Sense::hover()).0;
-        let heads = [("Name", SortBy::Name), ("Größe", SortBy::Size), ("Geändert", SortBy::Date)];
+        let heads = [(t!("Name", "Name"), SortBy::Name), (t!("Größe", "Size"), SortBy::Size), (t!("Geändert", "Modified"), SortBy::Date)];
         let mut x = header.left();
         for (i, (label, by)) in heads.iter().enumerate() {
             let r = egui::Rect::from_min_size(pos2(x, header.top()), vec2(cols[i], 22.0));
             let resp = ui.interact(r, ui.scope_id().with(("hdr", i)), Sense::click());
             let arrow = if t.sftp.sort == *by { if t.sftp.asc { " ▲" } else { " ▼" } } else { "" };
-            ui.painter().text(
-                r.left_center() + vec2(6.0, 0.0),
-                Align2::LEFT_CENTER,
-                format!("{label}{arrow}"),
-                FontId::proportional(12.0),
-                if resp.hovered() { Color32::WHITE } else { MUTED },
-            );
+            ui.painter().text(r.left_center() + vec2(6.0, 0.0), Align2::LEFT_CENTER, format!("{label}{arrow}"), FontId::proportional(12.0), if resp.hovered() { Color32::WHITE } else { MUTED });
             if resp.clicked() {
                 act = Some(A::Sort(*by));
             }
@@ -418,7 +546,6 @@ impl App {
         let path = t.sftp.path.clone();
         let count = files.iter().filter(|f| f.name != "..").count();
         egui::ScrollArea::vertical().max_height(list_h).auto_shrink([false, false]).show_rows(ui, 26.0, files.len(), |ui, range| {
-            // Innerhalb der ScrollArea ist wegen der Scrollbar weniger Platz als außerhalb
             let w = ui.available_width();
             for f in &files[range] {
                 let (rect, resp) = ui.allocate_exact_size(vec2(w, 26.0), Sense::click());
@@ -441,21 +568,9 @@ impl App {
                 clip.text(rect.left_center() + vec2(9.0, 0.0), Align2::LEFT_CENTER, file_icon(f), FontId::proportional(14.0), icon_col);
                 clip.text(rect.left_center() + vec2(32.0, 0.0), Align2::LEFT_CENTER, name, FontId::proportional(13.5), name_col);
                 if !f.is_dir {
-                    ui.painter().text(
-                        pos2(rect.left() + cols[0] + 6.0, rect.center().y),
-                        Align2::LEFT_CENTER,
-                        human_size(f.size),
-                        FontId::proportional(12.0),
-                        MUTED,
-                    );
+                    ui.painter().text(pos2(rect.left() + cols[0] + 6.0, rect.center().y), Align2::LEFT_CENTER, human_size(f.size), FontId::proportional(12.0), MUTED);
                 }
-                ui.painter().text(
-                    pos2(rect.left() + cols[0] + cols[1] + 6.0, rect.center().y),
-                    Align2::LEFT_CENTER,
-                    fmt_time(f.modified),
-                    FontId::proportional(12.0),
-                    MUTED,
-                );
+                ui.painter().text(pos2(rect.left() + cols[0] + cols[1] + 6.0, rect.center().y), Align2::LEFT_CENTER, fmt_time(f.modified), FontId::proportional(12.0), MUTED);
                 let resp = if f.perms.is_empty() { resp } else { resp.on_hover_text(format!("{}\n{}  ·  {}", f.name, f.perms, human_size(f.size))) };
                 if resp.clicked() {
                     new_sel = Some(f.name.clone());
@@ -467,32 +582,35 @@ impl App {
                     let full = join(&path, &f.name);
                     resp.context_menu(|ui| {
                         if f.is_dir {
-                            if ui.button("📂  Öffnen").clicked() {
+                            if ui.button(t!("📂  Öffnen", "📂  Open")).clicked() {
                                 act = Some(A::Open((*f).clone()));
                             }
-                            if ui.button("⌨  Im Terminal öffnen (cd)").clicked() {
+                            if ui.button(t!("⌨  Im Terminal öffnen (cd)", "⌨  Open in terminal (cd)")).clicked() {
                                 act = Some(A::Cd(full.clone()));
                             }
+                            if ui.button(t!("⬇  Ordner herunterladen…", "⬇  Download folder…")).clicked() {
+                                act = Some(A::Download((*f).clone()));
+                            }
                         } else {
-                            if ui.button("📝  Bearbeiten").clicked() {
+                            if ui.button(t!("📝  Bearbeiten", "📝  Edit")).clicked() {
                                 act = Some(A::Edit((*f).clone()));
                             }
-                            if ui.button("⬇  Herunterladen…").clicked() {
+                            if ui.button(t!("⬇  Herunterladen…", "⬇  Download…")).clicked() {
                                 act = Some(A::Download((*f).clone()));
                             }
                         }
                         ui.separator();
-                        if ui.button("✏  Umbenennen…").clicked() {
+                        if ui.button(t!("✎  Umbenennen…", "✎  Rename…")).clicked() {
                             act = Some(A::Rename(f.name.clone()));
                         }
-                        if ui.button("🔐  Rechte ändern…").clicked() {
+                        if ui.button(t!("🔐  Rechte ändern…", "🔐  Change permissions…")).clicked() {
                             act = Some(A::Chmod((*f).clone()));
                         }
-                        if ui.button("📋  Pfad kopieren").clicked() {
+                        if ui.button(t!("📋  Pfad kopieren", "📋  Copy path")).clicked() {
                             act = Some(A::CopyPath(full.clone()));
                         }
                         ui.separator();
-                        if ui.button(RichText::new("🗑  Löschen…").color(RED)).clicked() {
+                        if ui.button(RichText::new(t!("🗑  Löschen…", "🗑  Delete…")).color(RED)).clicked() {
                             act = Some(A::Delete((*f).clone()));
                         }
                     });
@@ -500,9 +618,19 @@ impl App {
             }
         });
         if loading {
-            ui.label(RichText::new("Lade…").color(MUTED).size(12.0));
+            ui.label(RichText::new(t!("Lade…", "Loading…")).color(MUTED).size(12.0));
         } else {
-            ui.add(egui::Label::new(RichText::new(format!("{count} Einträge · Doppelklick öffnet · Rechtsklick für mehr · Dateien hierher ziehen = Upload")).color(Color32::from_gray(105)).size(11.0)).truncate());
+            ui.add(
+                egui::Label::new(
+                    RichText::new(tf!(
+                        "{count} Einträge · Doppelklick öffnet · Rechtsklick für mehr · Dateien hierher ziehen = Upload",
+                        "{count} entries · double-click opens · right-click for more · drop files here = upload"
+                    ))
+                    .color(Color32::from_gray(105))
+                    .size(11.0),
+                )
+                .truncate(),
+            );
         }
         if let Some(n) = new_sel {
             t.sftp.selected = Some(n);
@@ -512,61 +640,111 @@ impl App {
         self.apply_files_action(id, act, &path);
     }
 
-    fn next_transfer_id(&mut self) -> u64 {
-        let id = self.transfers.iter().map(|t| t.id).max().unwrap_or(0) + 1;
-        id
-    }
-
     fn transfers_height(&self) -> f32 {
-        if self.transfers.is_empty() {
+        let n = self.visible_transfers().len();
+        if n == 0 {
             20.0
         } else {
-            32.0 + self.transfers.len().min(4) as f32 * 40.0
+            36.0 + n.min(5) as f32 * 42.0
         }
+    }
+
+    fn visible_transfers(&self) -> Vec<usize> {
+        (0..self.transfers.len())
+            .filter(|&i| !matches!(self.transfers[i].state, TransferState::Done(at) if at.elapsed().as_secs() > 5))
+            .collect()
     }
 
     fn transfers_ui(&mut self, ui: &mut Ui) {
         // Fertige Übertragungen nach kurzer Zeit ausblenden
-        self.transfers.retain(|t| !matches!(t.state, TransferState::Done(at) if at.elapsed().as_secs() > 4));
+        self.transfers.retain(|t| !matches!(t.state, TransferState::Done(at) if at.elapsed().as_secs() > 5));
         if self.transfers.is_empty() {
             return;
         }
         ui.separator();
-        ui.label(RichText::new("Übertragungen").size(12.0).color(MUTED).strong());
-        let mut remove = None;
-        for t in self.transfers.iter().rev().take(4) {
-            let done = t.done.load(Ordering::Relaxed);
-            let frac = if t.total > 0 { (done as f32 / t.total as f32).min(1.0) } else { 1.0 };
-            ui.horizontal(|ui| {
-                let arrow = if t.upload { "⬆" } else { "⬇" };
-                ui.label(RichText::new(arrow).color(LAVENDER));
-                ui.add(egui::Label::new(RichText::new(&t.label).size(12.5)).truncate());
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    match &t.state {
-                        TransferState::Running => {
-                            ui.label(RichText::new(format!("{} / {}", human_size(done), human_size(t.total))).size(11.5).color(MUTED));
-                        }
-                        TransferState::Done(_) => {
-                            ui.label(RichText::new("✔ fertig").size(11.5).color(GREEN));
-                        }
-                        TransferState::Failed(e) => {
-                            if ui.small_button("✖").clicked() {
-                                remove = Some(t.id);
-                            }
-                            ui.label(RichText::new("Fehler").size(11.5).color(RED)).on_hover_text(e);
-                        }
-                    }
-                });
+        let queued = self.transfers.iter().filter(|t| t.state == TransferState::Queued).count();
+        let mut action: Option<(u64, &str)> = None;
+        let mut clear = false;
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(t!("Übertragungen", "Transfers")).size(12.0).color(MUTED).strong());
+            if queued > 0 {
+                ui.label(RichText::new(tf!("{queued} wartend", "{queued} queued")).size(11.5).color(MUTED));
+            }
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if self.transfers.iter().any(|t| !t.is_active()) && ui.small_button(t!("Liste leeren", "Clear list")).clicked() {
+                    clear = true;
+                }
             });
-            let color = match t.state {
-                TransferState::Failed(_) => RED,
-                TransferState::Done(_) => GREEN,
-                TransferState::Running => ACCENT_HI,
-            };
-            ui.add(egui::ProgressBar::new(frac).desired_height(5.0).fill(color));
+        });
+        egui::ScrollArea::vertical().id_salt("transfers").max_height(5.0 * 42.0).show(ui, |ui| {
+            for t in self.transfers.iter().rev() {
+                let done = t.ctl.done.load(Ordering::Relaxed);
+                let frac = if t.total > 0 { (done as f32 / t.total as f32).min(1.0) } else if matches!(t.state, TransferState::Done(_)) { 1.0 } else { 0.0 };
+                let paused = t.paused();
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(if t.job.is_upload() { "⬆" } else { "⬇" }).color(LAVENDER));
+                    ui.add(egui::Label::new(RichText::new(&t.label).size(12.5)).truncate());
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        ui.spacing_mut().item_spacing.x = 3.0;
+                        match &t.state {
+                            TransferState::Running | TransferState::Queued => {
+                                if ui.small_button("✖").on_hover_text(t!("Abbrechen", "Cancel")).clicked() {
+                                    action = Some((t.id, "cancel"));
+                                }
+                                if t.state == TransferState::Running
+                                    && ui.small_button(if paused { "▶" } else { "⏸" }).on_hover_text(if paused { t!("Fortsetzen", "Resume") } else { t!("Pausieren", "Pause") }).clicked()
+                                {
+                                    action = Some((t.id, "pause"));
+                                }
+                                let txt = if t.state == TransferState::Queued {
+                                    t!("wartet", "queued").to_string()
+                                } else if paused {
+                                    t!("pausiert", "paused").to_string()
+                                } else if t.total > 0 {
+                                    format!("{} / {}", human_size(done), human_size(t.total))
+                                } else {
+                                    human_size(done)
+                                };
+                                ui.label(RichText::new(txt).size(11.5).color(MUTED));
+                            }
+                            TransferState::Done(_) => {
+                                ui.label(RichText::new(t!("✔ fertig", "✔ done")).size(11.5).color(GREEN));
+                            }
+                            TransferState::Cancelled | TransferState::Failed(_) => {
+                                if ui.small_button("🗑").on_hover_text(t!("Entfernen", "Remove")).clicked() {
+                                    action = Some((t.id, "remove"));
+                                }
+                                let tip = if t.job.can_resume() { t!("Fortsetzen ab der abgebrochenen Stelle", "Resume where it stopped") } else { t!("Erneut versuchen", "Retry") };
+                                if ui.small_button("⟳").on_hover_text(tip).clicked() {
+                                    action = Some((t.id, "retry"));
+                                }
+                                match &t.state {
+                                    TransferState::Failed(e) => {
+                                        ui.label(RichText::new(t!("Fehler", "Error")).size(11.5).color(RED)).on_hover_text(e);
+                                    }
+                                    _ => {
+                                        ui.label(RichText::new(t!("abgebrochen", "cancelled")).size(11.5).color(AMBER));
+                                    }
+                                }
+                            }
+                        }
+                    });
+                });
+                let color = match t.state {
+                    TransferState::Failed(_) => RED,
+                    TransferState::Cancelled => AMBER,
+                    TransferState::Done(_) => GREEN,
+                    _ if paused => AMBER,
+                    _ => ACCENT_HI,
+                };
+                ui.add(egui::ProgressBar::new(frac).desired_height(5.0).fill(color));
+            }
+        });
+        if let Some((id, a)) = action {
+            self.transfer_action(id, a);
         }
-        if let Some(id) = remove {
-            self.transfers.retain(|t| t.id != id);
+        if clear {
+            self.transfers.retain(|t| t.is_active());
         }
     }
 
@@ -620,34 +798,45 @@ impl App {
             }
             A::CopyPath(p) => {
                 self.ctx.copy_text(p);
-                self.notify("Pfad kopiert");
+                self.notify(t!("Pfad kopiert", "Path copied"));
             }
             A::Download(f) => {
-                if let Some(local) = rfd::FileDialog::new().set_title("Speicherort auswählen").set_file_name(&f.name).save_file() {
-                    self.start_download(id, join(path, &f.name), f.size, local);
+                if f.is_dir {
+                    if let Some(dir) = rfd::FileDialog::new().set_title(t!("Zielordner wählen", "Choose target folder")).pick_folder() {
+                        self.queue(id, Job::DownloadDir { remote: join(path, &f.name), local_parent: dir });
+                    }
+                } else if let Some(local) = rfd::FileDialog::new().set_title(t!("Speicherort auswählen", "Choose where to save")).set_file_name(&f.name).save_file() {
+                    let i = self.transfers.len();
+                    self.queue(id, Job::Download { remote: join(path, &f.name), local });
+                    self.transfers[i].total = f.size;
                 }
             }
             A::Upload => {
-                if let Some(files) = rfd::FileDialog::new().set_title("Dateien hochladen").pick_files() {
+                if let Some(files) = rfd::FileDialog::new().set_title(t!("Dateien hochladen", "Upload files")).pick_files() {
                     for p in files {
-                        self.start_upload(id, p, path.to_string());
+                        self.queue(id, Job::Upload { local: p, remote_dir: path.to_string() });
                     }
                 }
             }
             A::UploadDir => {
-                if let Some(dir) = rfd::FileDialog::new().set_title("Ordner hochladen").pick_folder() {
-                    self.start_upload(id, dir, path.to_string());
+                if let Some(dir) = rfd::FileDialog::new().set_title(t!("Ordner hochladen", "Upload folder")).pick_folder() {
+                    self.queue(id, Job::Upload { local: dir, remote_dir: path.to_string() });
                 }
             }
+            A::Sync => self.open_sync(id, path.to_string()),
             A::Delete(f) => {
                 let q = if f.is_dir {
-                    format!("Den Ordner „{}“ mit ALLEM Inhalt löschen?\n\nDas kann nicht rückgängig gemacht werden.", f.name)
+                    tf!(
+                        "Den Ordner „{}“ mit ALLEM Inhalt löschen?\n\nDas kann nicht rückgängig gemacht werden.",
+                        "Delete the folder \"{}\" with ALL its contents?\n\nThis cannot be undone.",
+                        f.name
+                    )
                 } else {
-                    format!("Die Datei „{}“ wirklich löschen?", f.name)
+                    tf!("Die Datei „{}“ wirklich löschen?", "Really delete the file \"{}\"?", f.name)
                 };
-                if confirm("Löschen", &q, MessageLevel::Warning) {
+                if confirm(t!("Löschen", "Delete"), &q, MessageLevel::Warning) {
                     let p = join(path, &f.name);
-                    self.sftp_op(id, "Löschen", move |s| async move { ssh::delete_recursive(&s, &p).await });
+                    self.sftp_op(id, t!("Löschen", "Delete").into(), move |s| async move { ssh::delete_recursive(&s, &p).await });
                 }
             }
             A::Rename(name) => {
@@ -664,7 +853,7 @@ impl App {
 
     fn edit_file(&mut self, id: u64, dir: &str, f: &FileInfo) {
         if f.size > 5 * 1024 * 1024 {
-            alert("Editor", "Die Datei ist größer als 5 MB. Bitte herunterladen und lokal bearbeiten.");
+            alert("Editor", t!("Die Datei ist größer als 5 MB. Bitte herunterladen und lokal bearbeiten.", "The file is larger than 5 MB. Please download and edit it locally."));
             return;
         }
         self.open_editor(id, join(dir, &f.name), false);

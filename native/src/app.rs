@@ -3,14 +3,14 @@
 use crate::data::{self, BaudProfile, Host, Prefs, Snippet, SshKey};
 use crate::terminal::{Output, Size, Terminal, View};
 use crate::theme;
-use eframe::egui::{
-    self, vec2, Align, Color32, FontId, Key, Layout, Margin, Modifiers, RichText, Stroke, Ui,
-};
-use nebula_core::ssh::{self, FileInfo, SshSession};
-use nebula_core::{keys, serial, Cmd, Connection, Event, Sink};
+use eframe::egui::{self, vec2, Align, Color32, FontId, Key, Layout, Margin, Modifiers, RichText, Stroke, Ui};
+use nebula_core::net::Reach;
+use nebula_core::ssh::{self, FileInfo, Forward, SshSession};
+use nebula_core::stats::Stats;
+use nebula_core::{keys, serial, t, telnet, tf, Cmd, Connection, Event, Sink};
 use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
+use std::collections::HashMap;
 use std::io::Write as _;
-use std::sync::atomic::AtomicU64;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -24,10 +24,13 @@ pub const MUTED: Color32 = Color32::from_rgb(0x8e, 0x8d, 0xa3);
 pub const RED: Color32 = Color32::from_rgb(0xff, 0x4d, 0x73);
 pub const GREEN: Color32 = Color32::from_rgb(0x5c, 0xdb, 0x7d);
 pub const AMBER: Color32 = Color32::from_rgb(0xff, 0xb5, 0x47);
+pub const CYAN: Color32 = Color32::from_rgb(0x5c, 0xc8, 0xff);
 pub const ACCENT: Color32 = Color32::from_rgb(0x62, 0x00, 0xee);
 pub const ACCENT_HI: Color32 = Color32::from_rgb(0x7c, 0x22, 0xff);
 pub const LAVENDER: Color32 = Color32::from_rgb(0xb9, 0xa4, 0xff);
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Höchstens so viele Terminals in der geteilten Ansicht
+pub const MAX_SPLIT: usize = 4;
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum Status {
@@ -79,12 +82,25 @@ impl Default for Sftp {
     }
 }
 
+/// Server-Kennzahlen eines Tabs
+#[derive(Default)]
+pub struct StatsState {
+    pub value: Option<Stats>,
+    pub at: Option<Instant>,
+    pub busy: bool,
+    /// false = kein Linux / exec nicht erlaubt -> nicht mehr abfragen
+    pub unsupported: bool,
+    pub failures: u8,
+}
+
 pub struct Tab {
     pub id: u64,
     pub title: String,
     pub host: Host,
     /// Zugangsdaten dieser Sitzung (für "Neu verbinden"), nur im Speicher
     pub secret: String,
+    /// Passwort / Passphrase des Jump-Hosts
+    pub jump_secret: String,
     pub term: Terminal,
     pub conn: Option<Arc<dyn Connection>>,
     pub ssh: Option<Arc<SshSession>>,
@@ -93,6 +109,9 @@ pub struct Tab {
     pub sftp: Sftp,
     pub log: Option<Arc<Mutex<std::fs::File>>>,
     pub connected_at: Option<Instant>,
+    pub stats: StatsState,
+    /// In einem eigenen Fenster
+    pub detached: Option<egui::Pos2>,
 }
 
 impl Tab {
@@ -111,40 +130,38 @@ impl Tab {
         self.ssh = None;
     }
     pub fn is_ssh(&self) -> bool {
-        !self.host.is_serial()
+        self.host.is_ssh()
     }
-}
-
-pub enum TransferState {
-    Running,
-    Done(Instant),
-    Failed(String),
-}
-
-pub struct Transfer {
-    pub id: u64,
-    pub label: String,
-    pub upload: bool,
-    pub total: u64,
-    pub done: Arc<AtomicU64>,
-    pub state: TransferState,
+    pub fn status_color(&self) -> Color32 {
+        match self.status {
+            Status::Connecting => AMBER,
+            Status::Connected => GREEN,
+            Status::Closed => RED,
+        }
+    }
 }
 
 pub enum Msg {
     SshConnected(u64, Arc<SshSession>),
-    SerialConnected(u64, Arc<serial::SerialSession>),
+    Connected(u64, Arc<dyn Connection>),
     Failed(u64, String),
     Closed(u64),
     SftpList(u64, String, Result<Vec<FileInfo>, String>),
     SftpHome(u64, Result<String, String>),
-    SftpDone(u64, Result<(), String>, &'static str),
+    SftpDone(u64, Result<(), String>, String),
     FileLoaded(u64, String, Result<String, String>),
     FileSaved(u64, Result<(), String>),
     TransferDone(u64, u64, Result<(), String>),
+    TransferSize(u64, u64),
     KeyGenerated(Result<keys::GeneratedKey, String>),
     KeyInstalled(Result<bool, String>),
     UpdateChecked(Result<Option<nebula_core::update::Release>, String>, bool),
     UpdateDownloaded(Result<std::path::PathBuf, String>, bool),
+    Stats(u64, Result<Option<Stats>, String>),
+    Reach(String, Reach, bool),
+    TunnelOpened(u64, String, Result<(), String>),
+    SyncCompared(u64, Result<Vec<crate::sync::Row>, String>),
+    AgentKeys(Result<Vec<(String, String, String)>, String>),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -157,23 +174,23 @@ pub enum SettingsPage {
     About,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum HostPage {
+    General,
+    Auth,
+    Tunnels,
+    Advanced,
+}
+
 pub enum Dialog {
     AddBaud { name: String, rate: String },
-    AddSnippet { name: String, cmd: String },
-    EditHost { index: Option<usize>, host: Host, new_group: String },
-    Editor {
-        tab: u64,
-        path: String,
-        content: String,
-        original: String,
-        loading: bool,
-        saving: bool,
-    },
+    EditHost { index: Option<usize>, host: Host, new_group: String, page: HostPage, new_fwd: Forward },
+    Editor { tab: u64, path: String, content: String, original: String, loading: bool, saving: bool },
     Rename { tab: u64, old: String, new: String },
     MkDir { tab: u64, name: String },
     NewFile { tab: u64, name: String },
     Chmod { tab: u64, path: String, name: String, mode: String },
-    Keys { selected: Option<usize> },
+    Keys { selected: Option<usize>, agent: Option<Result<Vec<(String, String, String)>, String>> },
     KeyGen {
         kind: keys::KeyType,
         name: String,
@@ -187,9 +204,14 @@ pub enum Dialog {
     ImportKey { name: String, content: String },
     Settings { page: SettingsPage, prefs: Prefs, lock1: String, lock2: String },
     Backup { export: bool, pass1: String, pass2: String, status: Option<String> },
-    /// Passwort / Passphrase beim Verbinden abfragen
-    Ask { tab: u64, passphrase: bool, value: String, remember: bool },
+    /// Passwort / Passphrase beim Verbinden abfragen (`jump` = für den Jump-Host)
+    Ask { tab: u64, passphrase: bool, value: String, remember: bool, jump: bool },
     Update,
+    Snippets { query: String, edit: Option<(Option<usize>, Snippet)>, focus: bool },
+    RunSnippet { snippet: Snippet, values: Vec<(String, String)>, enter: bool },
+    Tunnels { tab: u64, new: Forward, save: bool },
+    Import { rows: Vec<crate::importer::Row>, source: String, error: Option<String> },
+    Sync(crate::sync::SyncState),
 }
 
 pub enum Screen {
@@ -208,6 +230,8 @@ pub struct App {
     pub tabs: Vec<Tab>,
     pub active: Option<u64>,
     next_id: u64,
+    /// Tabs, die gemeinsam in der geteilten Ansicht stehen
+    pub split: Vec<u64>,
 
     pub form: Host,
     pub ports: Vec<String>,
@@ -227,7 +251,7 @@ pub struct App {
     pub search_miss: bool,
     pub focus_term: bool,
     pub dialog: Option<Dialog>,
-    pub transfers: Vec<Transfer>,
+    pub transfers: Vec<crate::files::Transfer>,
     pub pending_backup: Option<bool>,
     pub update: crate::updater::UpdateState,
     update_started: bool,
@@ -235,6 +259,9 @@ pub struct App {
     last_activity: Instant,
     restore_pending: bool,
     last_title: String,
+    /// Erreichbarkeit gespeicherter Geräte (Schlüssel: Adresse)
+    pub reach: HashMap<String, (Instant, Option<Reach>)>,
+    last_reach_round: Option<Instant>,
 
     pub logo: egui::TextureHandle,
 }
@@ -294,6 +321,15 @@ fn strip_ansi(data: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Gerätetyp als kleines Symbol (Text, Schrift, Farbe)
+pub fn kind_glyph(h: &Host, size: f32) -> (&'static str, FontId, Color32) {
+    match h.kind.as_str() {
+        "serial" => ("🔌", FontId::proportional(size), AMBER),
+        "telnet" => ("T", FontId::monospace(size * 0.95), CYAN),
+        _ => (">_", FontId::monospace(size * 0.95), LAVENDER),
+    }
+}
+
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let rt = tokio::runtime::Builder::new_multi_thread()
@@ -305,6 +341,9 @@ impl App {
         let (tx, rx) = mpsc::channel();
         nebula_core::update::cleanup_old();
         let settings = data::load_settings();
+        nebula_core::i18n::apply(&settings.prefs.language);
+        // Mit der richtigen Sprache erneut laden (Namen der Standard-Makros)
+        let settings = data::load_settings();
         let keys = data::load_keys();
         let prefs = settings.prefs;
         let form = Host {
@@ -312,9 +351,7 @@ impl App {
             key_name: keys.first().map(|k| k.name.clone()).unwrap_or_default(),
             ..Default::default()
         };
-        let img = image::load_from_memory(include_bytes!("../assets/256x256.png"))
-            .expect("Logo")
-            .into_rgba8();
+        let img = image::load_from_memory(include_bytes!("../assets/256x256.png")).expect("Logo").into_rgba8();
         let logo = cc.egui_ctx.load_texture(
             "logo",
             egui::ColorImage::from_rgba_unmultiplied([256, 256], img.as_raw()),
@@ -336,6 +373,7 @@ impl App {
             tabs: Vec::new(),
             active: None,
             next_id: 1,
+            split: Vec::new(),
             form,
             ports: Vec::new(),
             baud_label: "115200".into(),
@@ -360,6 +398,8 @@ impl App {
             toast: None,
             last_activity: Instant::now(),
             last_title: String::new(),
+            reach: HashMap::new(),
+            last_reach_round: None,
             logo,
         }
     }
@@ -407,9 +447,7 @@ impl App {
                     core.lock().unwrap().feed(&d);
                 }
                 Event::Closed(msg) => {
-                    core.lock()
-                        .unwrap()
-                        .feed(format!("\r\n\x1b[90m{msg}\x1b[0m\r\n").as_bytes());
+                    core.lock().unwrap().feed(format!("\r\n\x1b[90m{msg}\x1b[0m\r\n").as_bytes());
                     let _ = tx.send(Msg::Closed(tab));
                 }
             }
@@ -427,10 +465,7 @@ impl App {
             self.prefs.log_dir.clone().into()
         };
         std::fs::create_dir_all(&dir).ok()?;
-        let safe: String = title
-            .chars()
-            .map(|c| if c.is_alphanumeric() || "-_.@".contains(c) { c } else { '_' })
-            .collect();
+        let safe: String = title.chars().map(|c| if c.is_alphanumeric() || "-_.@".contains(c) { c } else { '_' }).collect();
         let name = format!("{}_{}.log", chrono::Local::now().format("%Y-%m-%d_%H-%M-%S"), safe);
         std::fs::File::create(dir.join(name)).ok().map(|f| Arc::new(Mutex::new(f)))
     }
@@ -439,20 +474,82 @@ impl App {
     // Verbinden
     // ------------------------------------------------------------------
 
+    /// Gespeichertes Gerät, das als Jump-Host eingetragen ist.
+    pub fn jump_host(&self, host: &Host) -> Option<Host> {
+        let j = host.jump.trim();
+        if j.is_empty() {
+            return None;
+        }
+        self.hosts
+            .iter()
+            .find(|h| h.is_ssh() && (h.name == j || h.display_name() == j))
+            .cloned()
+            .filter(|h| !h.same_device(host))
+    }
+
+    fn key_content(&self, name: &str) -> Option<String> {
+        self.keys.iter().find(|k| k.name == name).map(|k| k.content.clone())
+    }
+
+    /// Fehlt für Server oder Jump-Host ein Passwort bzw. eine Passphrase?
+    fn missing_secret(&self, tab: &Tab) -> Option<Dialog> {
+        let ask = |passphrase: bool, jump: bool| Dialog::Ask { tab: tab.id, passphrase, value: String::new(), remember: false, jump };
+        let needs = |h: &Host, secret: &str| -> Option<bool> {
+            match h.auth_method.as_str() {
+                "agent" => None,
+                "key" => {
+                    let k = self.key_content(&h.key_name)?;
+                    (keys::is_encrypted(&k) && secret.is_empty()).then_some(true)
+                }
+                _ => secret.is_empty().then_some(false),
+            }
+        };
+        if let Some(j) = self.jump_host(&tab.host) {
+            let secret = if tab.jump_secret.is_empty() && j.auth_method != "key" { j.pass.clone() } else { tab.jump_secret.clone() };
+            if let Some(pp) = needs(&j, &secret) {
+                return Some(ask(pp, true));
+            }
+        }
+        needs(&tab.host, &tab.secret).map(|pp| ask(pp, false))
+    }
+
+    fn auth_for(&self, h: &Host, secret: &str) -> ssh::Auth {
+        let key = if h.auth_method == "key" { self.key_content(&h.key_name).unwrap_or_default() } else { String::new() };
+        ssh::Auth { user: h.user.clone(), pass: secret.to_string(), key, agent: h.auth_method == "agent" }
+    }
+
+    fn jump_target(&self, tab: &Tab) -> Option<ssh::Target> {
+        let j = tab.host.jump.trim();
+        if j.is_empty() {
+            return None;
+        }
+        match self.jump_host(&tab.host) {
+            Some(h) => {
+                let secret = if tab.jump_secret.is_empty() && h.auth_method != "key" { h.pass.clone() } else { tab.jump_secret.clone() };
+                Some(ssh::Target { addr: h.ip.clone(), auth: self.auth_for(&h, &secret) })
+            }
+            None => {
+                // Freie Angabe "benutzer@host:port" (z.B. aus ~/.ssh/config): über den SSH-Agent anmelden
+                let (user, addr) = j.rsplit_once('@').map(|(u, a)| (u.to_string(), a.to_string())).unwrap_or((tab.host.user.clone(), j.to_string()));
+                Some(ssh::Target { addr, auth: ssh::Auth { user, pass: tab.jump_secret.clone(), key: String::new(), agent: true } })
+            }
+        }
+    }
+
     /// Öffnet einen neuen Tab für ein Gerät und verbindet.
     pub fn open(&mut self, host: Host, secret: Option<String>) {
         if host.is_serial() {
             if host.port.is_empty() {
-                alert("NebulaSSH", "Kein COM-Port gefunden oder ausgewählt!");
+                alert("NebulaSSH", t!("Kein COM-Port gefunden oder ausgewählt!", "No COM port found or selected!"));
                 return;
             }
         } else {
-            if host.ip.trim().is_empty() || host.user.trim().is_empty() {
-                alert("NebulaSSH", "Bitte IP/Host und Benutzername eingeben!");
+            if host.ip.trim().is_empty() || (host.is_ssh() && host.user.trim().is_empty()) {
+                alert("NebulaSSH", t!("Bitte IP/Host und Benutzername eingeben!", "Please enter host/IP and user name!"));
                 return;
             }
-            if host.auth_method == "key" && !self.keys.iter().any(|k| k.name == host.key_name) {
-                alert("NebulaSSH", "Bitte wähle einen gültigen SSH-Key aus.");
+            if host.is_ssh() && host.auth_method == "key" && !self.keys.iter().any(|k| k.name == host.key_name) {
+                alert("NebulaSSH", t!("Bitte wähle einen gültigen SSH-Key aus.", "Please choose a valid SSH key."));
                 return;
             }
         }
@@ -469,11 +566,12 @@ impl App {
         let title = host.display_name();
         let term = Terminal::new(self.prefs.scrollback, &self.prefs.cursor, size);
         let log = self.open_log(&title);
-        let default_secret = if host.auth_method == "key" { String::new() } else { host.pass.clone() };
+        let default_secret = if host.auth_method == "password" { host.pass.clone() } else { String::new() };
         self.tabs.push(Tab {
             id,
             title,
             secret: secret.unwrap_or(default_secret),
+            jump_secret: String::new(),
             host,
             term,
             conn: None,
@@ -483,6 +581,8 @@ impl App {
             sftp: Sftp::default(),
             log,
             connected_at: None,
+            stats: StatsState::default(),
+            detached: None,
         });
         self.active = Some(id);
         self.focus_term = true;
@@ -494,19 +594,9 @@ impl App {
         let Some(idx) = self.tabs.iter().position(|t| t.id == id) else { return };
         let host = self.tabs[idx].host.clone();
 
-        // Fehlende Zugangsdaten zuerst abfragen
-        if !host.is_serial() {
-            let key = self.keys.iter().find(|k| k.name == host.key_name).map(|k| k.content.clone());
-            let secret = self.tabs[idx].secret.clone();
-            if host.auth_method == "key" {
-                if let Some(k) = &key {
-                    if keys::is_encrypted(k) && secret.is_empty() {
-                        self.dialog = Some(Dialog::Ask { tab: id, passphrase: true, value: String::new(), remember: false });
-                        return;
-                    }
-                }
-            } else if secret.is_empty() {
-                self.dialog = Some(Dialog::Ask { tab: id, passphrase: false, value: String::new(), remember: false });
+        if host.is_ssh() {
+            if let Some(d) = self.missing_secret(&self.tabs[idx]) {
+                self.dialog = Some(d);
                 return;
             }
         }
@@ -515,7 +605,8 @@ impl App {
         let sink = self.sink(id, &self.tabs[idx].term, log);
         let tx = self.tx.clone();
         let ctx = self.ctx.clone();
-        let keys_store = self.keys.clone();
+        let jump = if host.is_ssh() { self.jump_target(&self.tabs[idx]) } else { None };
+        let auth = self.auth_for(&host, &self.tabs[idx].secret);
         let opts = ssh::Options {
             keepalive_secs: self.prefs.keepalive,
             legacy_algorithms: self.prefs.legacy_algorithms,
@@ -523,13 +614,10 @@ impl App {
                 let v: ssh::Verifier = Arc::new(|host: String, fp: String| {
                     MessageDialog::new()
                         .set_level(MessageLevel::Warning)
-                        .set_title("Neuer Server – Host-Key prüfen")
-                        .set_description(format!(
-                            "Mit {host} wurde noch nie verbunden.\n\n\
-                             Fingerprint des Servers:\n{fp}\n\n\
-                             Stimmt dieser Fingerprint mit dem des Servers überein?\n\
-                             (Auf dem Server: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub)\n\n\
-                             Dem Server vertrauen und verbinden?"
+                        .set_title(t!("Neuer Server – Host-Key prüfen", "New server – verify host key"))
+                        .set_description(tf!(
+                            "Mit {host} wurde noch nie verbunden.\n\nFingerprint des Servers:\n{fp}\n\nStimmt dieser Fingerprint mit dem des Servers überein?\n(Auf dem Server: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub)\n\nDem Server vertrauen und verbinden?",
+                            "You have never connected to {host}.\n\nServer fingerprint:\n{fp}\n\nDoes this fingerprint match the server's?\n(On the server: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub)\n\nTrust the server and connect?"
                         ))
                         .set_buttons(MessageButtons::YesNo)
                         .show()
@@ -537,38 +625,56 @@ impl App {
                 });
                 v
             }),
+            jump: jump.clone(),
+            agent_forward: host.agent_forward,
+            x11: host.x11,
+            x11_display: self.prefs.x11_display,
+            forwards: host.forwards.clone(),
         };
         let tab = &mut self.tabs[idx];
         tab.status = Status::Connecting;
-        if host.is_serial() {
-            let (port, baud) = (host.port.clone(), host.baud);
-            tab.term.print(&format!("\x1b[1;32mÖffne Serial Port {port} mit {baud} Baud...\x1b[0m\n"));
-            self.rt.spawn_blocking(move || {
-                let msg = match serial::connect(&port, baud, sink) {
-                    Ok(s) => Msg::SerialConnected(id, s),
-                    Err(e) => Msg::Failed(id, e),
-                };
-                let _ = tx.send(msg);
-                ctx.request_repaint();
-            });
-        } else {
-            tab.term.print(&format!("\x1b[1;32mBaue SSH Verbindung zu {} auf...\x1b[0m\n", host.ip));
-            let key = if host.auth_method == "key" {
-                keys_store.iter().find(|k| k.name == host.key_name).map(|k| k.content.clone()).unwrap_or_default()
-            } else {
-                String::new()
-            };
-            let secret = tab.secret.clone();
-            let (cols, rows) = (tab.term.size.cols as u32, tab.term.size.rows as u32);
-            let handle = self.rt.spawn(async move {
-                let msg = match ssh::connect(host.ip, host.user, secret, key, cols, rows, opts, sink).await {
-                    Ok(s) => Msg::SshConnected(id, s),
-                    Err(e) => Msg::Failed(id, e),
-                };
-                let _ = tx.send(msg);
-                ctx.request_repaint();
-            });
-            tab.task = Some(handle.abort_handle());
+        tab.stats = StatsState::default();
+        let (cols, rows) = (tab.term.size.cols as u32, tab.term.size.rows as u32);
+        match host.kind.as_str() {
+            "serial" => {
+                let (port, baud) = (host.port.clone(), host.baud);
+                tab.term.print(&tf!("\x1b[1;32mÖffne Serial Port {port} mit {baud} Baud...\x1b[0m\n", "\x1b[1;32mOpening serial port {port} at {baud} baud...\x1b[0m\n"));
+                self.rt.spawn_blocking(move || {
+                    let msg = match serial::connect(&port, baud, sink) {
+                        Ok(s) => Msg::Connected(id, s),
+                        Err(e) => Msg::Failed(id, e),
+                    };
+                    let _ = tx.send(msg);
+                    ctx.request_repaint();
+                });
+            }
+            "telnet" => {
+                tab.term.print(&tf!("\x1b[1;32mTelnet-Verbindung zu {} ...\x1b[0m\n", "\x1b[1;32mTelnet connection to {} ...\x1b[0m\n", host.ip));
+                let addr = host.ip.clone();
+                let handle = self.rt.spawn(async move {
+                    let msg = match telnet::connect(addr, cols, rows, sink).await {
+                        Ok(s) => Msg::Connected(id, s),
+                        Err(e) => Msg::Failed(id, e),
+                    };
+                    let _ = tx.send(msg);
+                    ctx.request_repaint();
+                });
+                tab.task = Some(handle.abort_handle());
+            }
+            _ => {
+                let via = jump.as_ref().map(|j| tf!(" über {}", " via {}", j.addr)).unwrap_or_default();
+                tab.term.print(&tf!("\x1b[1;32mBaue SSH Verbindung zu {}{via} auf...\x1b[0m\n", "\x1b[1;32mOpening SSH connection to {}{via}...\x1b[0m\n", host.ip));
+                let target = ssh::Target { addr: host.ip.clone(), auth };
+                let handle = self.rt.spawn(async move {
+                    let msg = match ssh::connect(target, cols, rows, opts, sink).await {
+                        Ok(s) => Msg::SshConnected(id, s),
+                        Err(e) => Msg::Failed(id, e),
+                    };
+                    let _ = tx.send(msg);
+                    ctx.request_repaint();
+                });
+                tab.task = Some(handle.abort_handle());
+            }
         }
     }
 
@@ -583,8 +689,13 @@ impl App {
 
     pub fn duplicate(&mut self, id: u64) {
         if let Some(t) = self.tabs.iter().find(|t| t.id == id) {
-            let (h, s) = (t.host.clone(), t.secret.clone());
+            let (h, s, js) = (t.host.clone(), t.secret.clone(), t.jump_secret.clone());
             self.open(h, Some(s));
+            if let Some(n) = self.tabs.last_mut() {
+                if n.jump_secret.is_empty() {
+                    n.jump_secret = js;
+                }
+            }
         }
     }
 
@@ -594,8 +705,8 @@ impl App {
             && self.prefs.confirm_close
             && self.tabs[idx].status == Status::Connected
             && !confirm(
-                "Tab schließen",
-                &format!("Die Verbindung „{}“ ist noch aktiv. Trennen und schließen?", self.tabs[idx].title),
+                t!("Tab schließen", "Close tab"),
+                &tf!("Die Verbindung „{}“ ist noch aktiv. Trennen und schließen?", "The connection \"{}\" is still active. Disconnect and close?", self.tabs[idx].title),
                 MessageLevel::Info,
             )
         {
@@ -603,12 +714,17 @@ impl App {
         }
         let mut tab = self.tabs.remove(idx);
         tab.shutdown();
+        self.split.retain(|s| *s != id);
+        if self.split.len() < 2 {
+            self.split.clear();
+        }
         if self.active == Some(id) {
-            self.active = if self.tabs.is_empty() {
+            let visible: Vec<u64> = self.tabs.iter().filter(|t| t.detached.is_none()).map(|t| t.id).collect();
+            self.active = if visible.is_empty() {
                 self.search = None;
                 None
             } else {
-                Some(self.tabs[idx.saturating_sub(1).min(self.tabs.len() - 1)].id)
+                Some(visible[idx.saturating_sub(1).min(visible.len() - 1)])
             };
             self.focus_term = true;
         }
@@ -617,22 +733,86 @@ impl App {
     pub fn switch_tab(&mut self, id: u64) {
         self.active = Some(id);
         self.focus_term = true;
-        let need_files = self.show_files
-            && self.tabs.iter().any(|t| t.id == id && t.ssh.is_some() && !t.sftp.initialized);
+        let need_files = self.show_files && self.tabs.iter().any(|t| t.id == id && t.ssh.is_some() && !t.sftp.initialized);
         if need_files {
             self.sftp_init(id);
         }
     }
 
     fn cycle_tab(&mut self, dir: i32) {
-        if self.tabs.is_empty() {
+        let visible: Vec<u64> = self.tabs.iter().filter(|t| t.detached.is_none()).map(|t| t.id).collect();
+        if visible.is_empty() {
             return;
         }
-        let idx = self.active.and_then(|a| self.tabs.iter().position(|t| t.id == a)).unwrap_or(0) as i32;
-        let n = self.tabs.len() as i32;
+        let idx = self.active.and_then(|a| visible.iter().position(|t| *t == a)).unwrap_or(0) as i32;
+        let n = visible.len() as i32;
         let next = ((idx + dir) % n + n) % n;
-        let id = self.tabs[next as usize].id;
+        self.switch_tab(visible[next as usize]);
+    }
+
+    /// Tab in ein eigenes Fenster verschieben (oder zurückholen).
+    pub fn detach(&mut self, id: u64, pos: Option<egui::Pos2>) {
+        let pos = pos.unwrap_or_else(|| {
+            let r = self.ctx.input(|i| i.viewport().outer_rect).unwrap_or(egui::Rect::from_min_size(egui::pos2(100.0, 100.0), vec2(100.0, 100.0)));
+            r.min + vec2(60.0, 60.0)
+        });
+        if let Some(t) = self.tab(id) {
+            t.detached = Some(pos);
+        }
+        self.split.retain(|s| *s != id);
+        if self.split.len() < 2 {
+            self.split.clear();
+        }
+        if self.active == Some(id) {
+            self.active = self.tabs.iter().find(|t| t.detached.is_none()).map(|t| t.id);
+        }
+    }
+
+    pub fn attach(&mut self, id: u64) {
+        if let Some(t) = self.tab(id) {
+            t.detached = None;
+        }
         self.switch_tab(id);
+    }
+
+    /// Tab in die geteilte Ansicht aufnehmen bzw. herausnehmen.
+    pub fn toggle_split(&mut self, id: u64) {
+        if let Some(p) = self.split.iter().position(|s| *s == id) {
+            self.split.remove(p);
+            if self.split.len() < 2 {
+                self.split.clear();
+            }
+            return;
+        }
+        if self.tabs.iter().any(|t| t.id == id && t.detached.is_some()) {
+            self.attach(id);
+        }
+        if self.split.is_empty() {
+            if let Some(a) = self.active.filter(|a| *a != id) {
+                self.split.push(a);
+            }
+        }
+        if self.split.len() >= MAX_SPLIT {
+            self.notify_err(tf!("Höchstens {MAX_SPLIT} Terminals nebeneinander", "At most {MAX_SPLIT} terminals side by side"));
+            return;
+        }
+        self.split.push(id);
+        self.active = Some(id);
+        self.focus_term = true;
+    }
+
+    /// Sichtbare Terminals im Hauptfenster
+    pub fn visible_panes(&self) -> Vec<u64> {
+        let split: Vec<u64> = self
+            .split
+            .iter()
+            .copied()
+            .filter(|id| self.tabs.iter().any(|t| t.id == *id && t.detached.is_none()))
+            .collect();
+        if split.len() >= 2 && self.active.is_some_and(|a| split.contains(&a)) {
+            return split;
+        }
+        self.active.into_iter().collect()
     }
 
     fn handle_msgs(&mut self) {
@@ -656,10 +836,13 @@ impl App {
                         None => s.close(),
                     }
                 }
-                Msg::SerialConnected(id, s) => match self.tab(id) {
+                Msg::Connected(id, s) => match self.tab(id) {
                     Some(t) => {
+                        t.task = None;
                         t.status = Status::Connected;
                         t.connected_at = Some(Instant::now());
+                        let size = t.term.size;
+                        s.send(Cmd::Resize(size.cols as u32, size.rows as u32));
                         t.conn = Some(s);
                     }
                     None => s.close(),
@@ -682,12 +865,12 @@ impl App {
                 }
                 Msg::SftpDone(id, res, what) => match res {
                     Ok(()) => {
-                        self.notify(format!("{what} erfolgreich"));
+                        self.notify(tf!("{what} erfolgreich", "{what}: done"));
                         self.reload_dir(id);
                     }
                     Err(e) => {
                         self.reload_dir(id);
-                        alert("Dateien", &format!("{what} fehlgeschlagen:\n{e}"));
+                        alert(t!("Dateien", "Files"), &tf!("{what} fehlgeschlagen:\n{e}", "{what} failed:\n{e}"));
                     }
                 },
                 Msg::FileLoaded(id, path, res) => {
@@ -706,7 +889,7 @@ impl App {
                     }
                     if let Some(e) = err {
                         self.dialog = None;
-                        alert("Editor", &format!("Konnte Datei nicht öffnen:\n{e}"));
+                        alert("Editor", &tf!("Konnte Datei nicht öffnen:\n{e}", "Could not open the file:\n{e}"));
                     }
                 }
                 Msg::FileSaved(id, res) => match res {
@@ -715,26 +898,20 @@ impl App {
                             *saving = false;
                             *original = content.clone();
                         }
-                        self.notify("Datei gespeichert");
+                        self.notify(t!("Datei gespeichert", "File saved"));
                         self.reload_dir(id);
                     }
                     Err(e) => {
                         if let Some(Dialog::Editor { saving, .. }) = &mut self.dialog {
                             *saving = false;
                         }
-                        alert("Editor", &format!("Fehler beim Speichern:\n{e}"));
+                        alert("Editor", &tf!("Fehler beim Speichern:\n{e}", "Error while saving:\n{e}"));
                     }
                 },
-                Msg::TransferDone(tid, tab, res) => {
-                    let ok = res.is_ok();
+                Msg::TransferDone(tid, tab, res) => self.on_transfer_done(tid, tab, res),
+                Msg::TransferSize(tid, size) => {
                     if let Some(t) = self.transfers.iter_mut().find(|t| t.id == tid) {
-                        t.state = match res {
-                            Ok(()) => TransferState::Done(Instant::now()),
-                            Err(e) => TransferState::Failed(e),
-                        };
-                    }
-                    if ok {
-                        self.reload_dir(tab);
+                        t.total = size;
                     }
                 }
                 Msg::KeyGenerated(res) => {
@@ -759,14 +936,61 @@ impl App {
                 Msg::UpdateDownloaded(res, installed) => self.on_update_downloaded(res, installed),
                 Msg::KeyInstalled(res) => {
                     let text = match res {
-                        Ok(true) => "✔ Public Key wurde auf dem Server hinterlegt.".to_string(),
-                        Ok(false) => "✔ Dieser Key war auf dem Server bereits hinterlegt.".to_string(),
-                        Err(e) => format!("✖ Fehler: {e}"),
+                        Ok(true) => t!("✔ Public Key wurde auf dem Server hinterlegt.", "✔ The public key was installed on the server.").to_string(),
+                        Ok(false) => t!("✔ Dieser Key war auf dem Server bereits hinterlegt.", "✔ This key was already installed on the server.").to_string(),
+                        Err(e) => tf!("✖ Fehler: {e}", "✖ Error: {e}"),
                     };
                     if let Some(Dialog::KeyGen { install_status, .. }) = &mut self.dialog {
                         *install_status = Some(text.clone());
                     }
                     self.notify(text);
+                }
+                Msg::Stats(id, res) => {
+                    if let Some(t) = self.tab(id) {
+                        t.stats.busy = false;
+                        t.stats.at = Some(Instant::now());
+                        match res {
+                            Ok(Some(s)) => {
+                                t.stats.value = Some(s);
+                                t.stats.failures = 0;
+                            }
+                            Ok(None) => t.stats.unsupported = true,
+                            Err(_) => {
+                                t.stats.failures += 1;
+                                if t.stats.failures >= 3 {
+                                    t.stats.unsupported = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                Msg::Reach(addr, r, manual) => {
+                    if manual {
+                        let name = self.hosts.iter().find(|h| h.ip == addr).map(|h| h.display_name()).unwrap_or(addr.clone());
+                        let text = format!("{name}: {}", r.summary());
+                        if r.online() {
+                            self.notify(text);
+                        } else {
+                            self.notify_err(text);
+                        }
+                    }
+                    self.reach.insert(addr, (Instant::now(), Some(r)));
+                }
+                Msg::TunnelOpened(_id, label, res) => match res {
+                    Ok(()) => self.notify(tf!("Tunnel geöffnet: {label}", "Tunnel opened: {label}")),
+                    Err(e) => self.notify_err(tf!("Tunnel {label}: {e}", "Tunnel {label}: {e}")),
+                },
+                Msg::SyncCompared(tab, res) => {
+                    if let Some(Dialog::Sync(s)) = &mut self.dialog {
+                        if s.tab == tab {
+                            s.on_compared(res);
+                        }
+                    }
+                }
+                Msg::AgentKeys(res) => {
+                    if let Some(Dialog::Keys { agent, .. }) = &mut self.dialog {
+                        *agent = Some(res);
+                    }
                 }
             }
         }
@@ -778,15 +1002,15 @@ impl App {
         t.status = Status::Closed;
         if let Some(rest) = err.strip_prefix(ssh::HOSTKEY_CHANGED) {
             let (host_id, change) = rest.split_once('|').unwrap_or((rest, ""));
-            t.term.print(&format!(
-                "\x1b[1;31m[WARNUNG] Der Host-Key von {host_id} hat sich geändert!\x1b[0m\n\x1b[33m{change}\x1b[0m\n"
+            t.term.print(&tf!(
+                "\x1b[1;31m[WARNUNG] Der Host-Key von {host_id} hat sich geändert!\x1b[0m\n\x1b[33m{change}\x1b[0m\n",
+                "\x1b[1;31m[WARNING] The host key of {host_id} has changed!\x1b[0m\n\x1b[33m{change}\x1b[0m\n"
             ));
             let ok = confirm(
-                "Host-Key geändert",
-                &format!(
-                    "ACHTUNG: Der Host-Key von {host_id} hat sich geändert!\n\n\
-                     Das kann eine Neuinstallation des Servers sein – oder ein Man-in-the-Middle-Angriff.\n\n\
-                     Neuen Key vertrauen und erneut verbinden?"
+                t!("Host-Key geändert", "Host key changed"),
+                &tf!(
+                    "ACHTUNG: Der Host-Key von {host_id} hat sich geändert!\n\nDas kann eine Neuinstallation des Servers sein – oder ein Man-in-the-Middle-Angriff.\n\nNeuen Key vertrauen und erneut verbinden?",
+                    "WARNING: The host key of {host_id} has changed!\n\nThis can be a reinstalled server – or a man-in-the-middle attack.\n\nTrust the new key and reconnect?"
                 ),
                 MessageLevel::Warning,
             );
@@ -796,13 +1020,93 @@ impl App {
             }
         } else {
             // Falsche Zugangsdaten nicht weiterverwenden
-            if err.contains("Passwort falsch") || err.contains("Passphrase") {
+            if err.starts_with(ssh::AUTH_FAILED) {
                 t.secret.clear();
-                if !t.host.pass.is_empty() && err.contains("Passwort falsch") {
+                t.jump_secret.clear();
+                if t.host.auth_method == "password" {
                     t.host.pass.clear();
                 }
             }
-            t.term.print(&format!("\x1b[1;31m[Fehler] {err}\x1b[0m\n"));
+            t.term.print(&tf!("\x1b[1;31m[Fehler] {}\x1b[0m\n", "\x1b[1;31m[Error] {}\x1b[0m\n", ssh::clean_error(&err)));
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Server-Infos und Erreichbarkeit
+    // ------------------------------------------------------------------
+
+    fn poll_stats(&mut self) {
+        if !self.prefs.server_stats {
+            return;
+        }
+        let ids = self.visible_panes();
+        for id in ids {
+            let tx = self.tx.clone();
+            let ctx = self.ctx.clone();
+            let Some(t) = self.tab(id) else { continue };
+            let due = t.stats.at.is_none_or(|a| a.elapsed() > Duration::from_secs(5));
+            if t.stats.busy || t.stats.unsupported || !due || t.status != Status::Connected {
+                continue;
+            }
+            let Some(s) = t.ssh.clone() else { continue };
+            // Erst kurz nach dem Login abfragen
+            if t.connected_at.is_some_and(|c| c.elapsed() < Duration::from_millis(1500)) {
+                continue;
+            }
+            t.stats.busy = true;
+            self.rt.spawn(async move {
+                let res = nebula_core::stats::fetch(&s).await;
+                let _ = tx.send(Msg::Stats(id, res));
+                ctx.request_repaint();
+            });
+        }
+        self.ctx.request_repaint_after(Duration::from_secs(5));
+    }
+
+    /// Prüft ein Gerät (Ping + Port).
+    pub fn check_reach(&mut self, host: &Host, manual: bool) {
+        if !host.is_network() || host.ip.trim().is_empty() {
+            return;
+        }
+        let addr = host.ip.clone();
+        let (h, port) = (host.host_only(), host.net_port());
+        self.reach.insert(addr.clone(), (Instant::now(), self.reach.get(&addr).and_then(|r| r.1.clone())));
+        let tx = self.tx.clone();
+        let ctx = self.ctx.clone();
+        self.rt.spawn_blocking(move || {
+            let r = nebula_core::net::check(&h, Some(port));
+            let _ = tx.send(Msg::Reach(addr, r, manual));
+            ctx.request_repaint();
+        });
+    }
+
+    fn poll_reach(&mut self) {
+        if !self.prefs.check_reachability {
+            return;
+        }
+        if self.last_reach_round.is_some_and(|t| t.elapsed() < Duration::from_secs(60)) {
+            return;
+        }
+        self.last_reach_round = Some(Instant::now());
+        let hosts: Vec<Host> = self.hosts.iter().filter(|h| h.is_network()).cloned().collect();
+        for h in hosts.iter().take(200) {
+            self.check_reach(h, false);
+        }
+        self.ctx.request_repaint_after(Duration::from_secs(61));
+    }
+
+    pub fn wake(&mut self, host: &Host) {
+        // Broadcast an alle und – falls IPv4 bekannt – an das /24-Netz des Geräts
+        let ip = host.host_only();
+        let mut res = nebula_core::net::wake_on_lan(&host.mac, None);
+        if let Ok(std::net::IpAddr::V4(v4)) = ip.parse::<std::net::IpAddr>() {
+            let o = v4.octets();
+            let b = format!("{}.{}.{}.255", o[0], o[1], o[2]);
+            res = res.and(nebula_core::net::wake_on_lan(&host.mac, Some(&b)));
+        }
+        match res {
+            Ok(()) => self.notify(tf!("Wake-on-LAN an {} gesendet", "Wake-on-LAN sent to {}", host.display_name())),
+            Err(e) => self.notify_err(e),
         }
     }
 
@@ -815,7 +1119,7 @@ impl App {
             return;
         }
         let cs = Modifiers::CTRL | Modifiers::SHIFT;
-        let (f, w, t, d, r, tab, stab, plus, minus, zero, b, e) = ui.input_mut(|i| {
+        let (f, w, t, d, r, tab, stab, plus, minus, zero, b, e, p, s, o) = ui.input_mut(|i| {
             (
                 i.consume_key(Modifiers::CTRL, Key::F),
                 i.consume_key(cs, Key::W),
@@ -829,6 +1133,9 @@ impl App {
                 i.consume_key(Modifiers::CTRL, Key::Num0),
                 i.consume_key(cs, Key::B),
                 i.consume_key(cs, Key::E),
+                i.consume_key(cs, Key::P),
+                i.consume_key(cs, Key::S),
+                i.consume_key(cs, Key::O),
             )
         });
         if f && self.active.is_some() {
@@ -860,13 +1167,9 @@ impl App {
             self.cycle_tab(-1);
         }
         if plus || minus || zero {
-            self.prefs.font_size = if zero {
-                14.0
-            } else {
-                (self.prefs.font_size + if plus { 1.0 } else { -1.0 }).clamp(9.0, 28.0)
-            };
+            self.prefs.font_size = if zero { 14.0 } else { (self.prefs.font_size + if plus { 1.0 } else { -1.0 }).clamp(9.0, 28.0) };
             self.save_settings();
-            self.notify(format!("Schriftgröße {:.0}", self.prefs.font_size));
+            self.notify(tf!("Schriftgröße {:.0}", "Font size {:.0}", self.prefs.font_size));
         }
         if b {
             self.prefs.sidebar_open = !self.prefs.sidebar_open;
@@ -874,6 +1177,35 @@ impl App {
         }
         if e && self.active_ssh().is_some() {
             self.toggle_files();
+        }
+        if p {
+            self.open_snippets();
+        }
+        if s {
+            self.split_next();
+        }
+        if o {
+            if let Some(id) = self.active {
+                self.detach(id, None);
+            }
+        }
+    }
+
+    /// Strg+Umschalt+S: geteilte Ansicht mit dem nächsten Tab ein- bzw. ausschalten
+    pub fn split_next(&mut self) {
+        if !self.split.is_empty() {
+            self.split.clear();
+            self.focus_term = true;
+            return;
+        }
+        let Some(a) = self.active else { return };
+        let next = self.tabs.iter().find(|t| t.id != a && t.detached.is_none()).map(|t| t.id);
+        match next {
+            Some(n) => {
+                self.split = vec![a, n];
+                self.focus_term = true;
+            }
+            None => self.notify_err(t!("Für die geteilte Ansicht wird ein zweiter Tab benötigt", "The split view needs a second tab")),
         }
     }
 
@@ -891,9 +1223,9 @@ impl App {
         }
     }
 
-    pub fn run_snippet(&mut self, cmd: String) {
-        let broadcast = self.broadcast;
-        let targets: Vec<u64> = if broadcast {
+    /// Sendet Text an den aktiven Tab (bzw. bei Broadcast an alle).
+    pub fn send_text(&mut self, text: String) -> bool {
+        let targets: Vec<u64> = if self.broadcast {
             self.tabs.iter().filter(|t| t.conn.is_some()).map(|t| t.id).collect()
         } else {
             self.active.into_iter().collect()
@@ -902,7 +1234,7 @@ impl App {
         for id in targets {
             if let Some(t) = self.tab(id) {
                 if t.conn.is_some() {
-                    t.send(Cmd::Data(cmd.clone().into_bytes()));
+                    t.send(Cmd::Data(text.clone().into_bytes()));
                     sent = true;
                 }
             }
@@ -910,8 +1242,9 @@ impl App {
         if sent {
             self.focus_term = true;
         } else {
-            alert("Makro", "Bitte öffne zuerst einen verbundenen Terminal-Tab, um das Makro auszuführen.");
+            alert("Snippet", t!("Bitte öffne zuerst einen verbundenen Terminal-Tab.", "Please open a connected terminal tab first."));
         }
+        sent
     }
 
     // ------------------------------------------------------------------
@@ -923,7 +1256,6 @@ impl App {
         let total = 2.2;
         let rect = ui.max_rect();
         let p = ui.painter();
-        // Hintergrund mit sanftem Verlauf
         p.rect_filled(rect, 0.0, Color32::from_rgb(0x0b, 0x0a, 0x14));
         let glow_c = rect.center() + vec2(0.0, -40.0);
         for i in 0..24 {
@@ -943,13 +1275,7 @@ impl App {
         );
         let a = |v: f32| Color32::from_white_alpha((255.0 * v) as u8);
         let ta = ((t - 0.3) / 0.5).clamp(0.0, 1.0);
-        p.text(
-            rect.center() + vec2(-2.0, 40.0),
-            egui::Align2::RIGHT_CENTER,
-            "Nebula",
-            FontId::new(40.0, egui::FontFamily::Name("ui-bold".into())),
-            a(ta),
-        );
+        p.text(rect.center() + vec2(-2.0, 40.0), egui::Align2::RIGHT_CENTER, "Nebula", FontId::new(40.0, egui::FontFamily::Name("ui-bold".into())), a(ta));
         p.text(
             rect.center() + vec2(-2.0, 40.0),
             egui::Align2::LEFT_CENTER,
@@ -960,11 +1286,10 @@ impl App {
         p.text(
             rect.center() + vec2(0.0, 82.0),
             egui::Align2::CENTER_CENTER,
-            format!("SSH · SFTP · Serial   —   Version {VERSION}"),
+            format!("SSH · SFTP · Telnet · Serial   —   Version {VERSION}"),
             FontId::proportional(15.0),
             Color32::from_rgba_unmultiplied(0xa7, 0xa3, 0xc2, (255.0 * ta) as u8),
         );
-        // Ladebalken
         let bar = egui::Rect::from_center_size(rect.center() + vec2(0.0, 130.0), vec2(220.0, 4.0));
         p.rect_filled(bar, 2.0, Color32::from_rgba_unmultiplied(255, 255, 255, 20));
         let prog = (t / (total - 0.2)).clamp(0.0, 1.0);
@@ -980,11 +1305,7 @@ impl App {
         );
         let skip = ui.input(|i| i.pointer.any_click() || i.key_pressed(Key::Escape) || i.key_pressed(Key::Enter));
         if t >= total || skip {
-            self.screen = if self.prefs.lock_hash.is_some() {
-                Screen::Locked { input: String::new(), error: false }
-            } else {
-                Screen::Main
-            };
+            self.screen = if self.prefs.lock_hash.is_some() { Screen::Locked { input: String::new(), error: false } } else { Screen::Main };
         } else {
             ui.ctx().request_repaint();
         }
@@ -996,46 +1317,43 @@ impl App {
         let mut unlocked = false;
         if let Screen::Locked { input, error } = &mut self.screen {
             let hash = self.prefs.lock_hash.clone().unwrap_or_default();
-            ui.scope_builder(
-                egui::UiBuilder::new().max_rect(egui::Rect::from_center_size(rect.center(), vec2(340.0, 360.0))),
-                |ui| {
-                    ui.vertical_centered(|ui| {
-                        ui.add(egui::Image::new(&self.logo).fit_to_exact_size(vec2(96.0, 96.0)));
-                        ui.add_space(14.0);
-                        ui.label(RichText::new("NebulaSSH ist gesperrt").size(22.0).strong().color(Color32::WHITE));
-                        ui.add_space(4.0);
-                        ui.label(RichText::new("Gib dein App-Passwort ein, um fortzufahren.").color(MUTED));
-                        ui.add_space(18.0);
-                        let r = ui.add(
-                            egui::TextEdit::singleline(input)
-                                .password(true)
-                                .hint_text("App-Passwort")
-                                .desired_width(280.0)
-                                .min_size(vec2(280.0, 34.0)),
-                        );
-                        if !r.has_focus() {
-                            r.request_focus();
+            ui.scope_builder(egui::UiBuilder::new().max_rect(egui::Rect::from_center_size(rect.center(), vec2(340.0, 360.0))), |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add(egui::Image::new(&self.logo).fit_to_exact_size(vec2(96.0, 96.0)));
+                    ui.add_space(14.0);
+                    ui.label(RichText::new(t!("NebulaSSH ist gesperrt", "NebulaSSH is locked")).size(22.0).strong().color(Color32::WHITE));
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(t!("Gib dein App-Passwort ein, um fortzufahren.", "Enter your app password to continue.")).color(MUTED));
+                    ui.add_space(18.0);
+                    let r = ui.add(
+                        egui::TextEdit::singleline(input)
+                            .password(true)
+                            .hint_text(t!("App-Passwort", "App password"))
+                            .desired_width(280.0)
+                            .min_size(vec2(280.0, 34.0)),
+                    );
+                    if !r.has_focus() {
+                        r.request_focus();
+                    }
+                    let enter = (r.lost_focus() || r.has_focus()) && ui.input(|i| i.key_pressed(Key::Enter));
+                    ui.add_space(10.0);
+                    let go = ui
+                        .add(egui::Button::new(RichText::new(t!("Entsperren", "Unlock")).strong().color(Color32::WHITE)).fill(ACCENT).min_size(vec2(280.0, 36.0)))
+                        .clicked();
+                    if enter || go {
+                        if nebula_core::backup::verify_password(input, &hash) {
+                            unlocked = true;
+                        } else {
+                            *error = true;
+                            input.clear();
                         }
-                        let enter = (r.lost_focus() || r.has_focus()) && ui.input(|i| i.key_pressed(Key::Enter));
-                        ui.add_space(10.0);
-                        let go = ui
-                            .add(egui::Button::new(RichText::new("Entsperren").strong().color(Color32::WHITE)).fill(ACCENT).min_size(vec2(280.0, 36.0)))
-                            .clicked();
-                        if enter || go {
-                            if nebula_core::backup::verify_password(input, &hash) {
-                                unlocked = true;
-                            } else {
-                                *error = true;
-                                input.clear();
-                            }
-                        }
-                        if *error {
-                            ui.add_space(8.0);
-                            ui.label(RichText::new("Falsches Passwort.").color(RED));
-                        }
-                    });
-                },
-            );
+                    }
+                    if *error {
+                        ui.add_space(8.0);
+                        ui.label(RichText::new(t!("Falsches Passwort.", "Wrong password.")).color(RED));
+                    }
+                });
+            });
         }
         if unlocked {
             self.screen = Screen::Main;
@@ -1077,9 +1395,7 @@ impl App {
             .frame(egui::Frame::new().fill(PANEL).stroke(Stroke::new(1.0, LINE)))
             .show(ui, |ui| self.tab_bar(ui));
 
-        let files_tab = self
-            .active
-            .filter(|id| self.show_files && self.tabs.iter().any(|t| t.id == *id && t.is_ssh()));
+        let files_tab = self.active.filter(|id| self.show_files && self.tabs.iter().any(|t| t.id == *id && t.is_ssh()));
         if let Some(id) = files_tab {
             egui::Panel::right("files")
                 .default_size(420.0)
@@ -1094,32 +1410,54 @@ impl App {
         self.drop_files(ui);
     }
 
-    fn terminal_area(&mut self, ui: &mut Ui) {
-        let rect = ui.max_rect();
-        let th = theme::by_id(&self.prefs.theme);
-        ui.painter().rect_filled(rect, 0.0, th.bg);
-        let view = View {
+    fn view(&self) -> View<'static> {
+        View {
             font: self.mono(),
-            theme: th,
+            theme: theme::by_id(&self.prefs.theme),
             copy_on_select: self.prefs.copy_on_select,
             right_click_paste: self.prefs.right_click_paste,
-        };
-        let focus = std::mem::take(&mut self.focus_term) && self.dialog.is_none() && self.search.is_none();
+        }
+    }
+
+    /// Zeichnet ein Terminal in `rect`. Liefert (neu verbinden, schließen, angeklickt).
+    fn pane(&mut self, ui: &mut Ui, id: u64, rect: egui::Rect, header: bool, focus: bool) -> (bool, bool, bool) {
+        let view = self.view();
         let broadcast = self.broadcast;
+        let active = self.active == Some(id);
         let mut bc: Vec<Vec<u8>> = Vec::new();
-        let mut reconnect = None;
-        let mut close = None;
-        match self.active.and_then(|id| self.tabs.iter_mut().find(|t| t.id == id)) {
-            Some(tab) => {
-                let tid = egui::Id::new(("term", tab.id));
-                if focus {
-                    ui.memory_mut(|m| m.request_focus(tid));
+        let (mut reconnect, mut close, mut clicked) = (false, false, false);
+        let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) else { return (false, false, false) };
+        ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+            ui.set_clip_rect(rect);
+            let mut term_rect = rect;
+            if header {
+                let head = egui::Rect::from_min_size(rect.min, vec2(rect.width(), 24.0));
+                term_rect.min.y += 24.0;
+                let p = ui.painter();
+                p.rect_filled(head, 0.0, if active { Color32::from_rgb(0x22, 0x18, 0x40) } else { PANEL });
+                p.circle_filled(head.left_center() + vec2(12.0, 0.0), 3.5, tab.status_color());
+                p.text(
+                    head.left_center() + vec2(22.0, 0.0),
+                    egui::Align2::LEFT_CENTER,
+                    tab.term.title.clone().unwrap_or_else(|| tab.title.clone()),
+                    FontId::proportional(12.5),
+                    if active { Color32::WHITE } else { MUTED },
+                );
+                let hr = ui.interact(head, egui::Id::new(("pane_head", id)), egui::Sense::click());
+                if hr.clicked() {
+                    clicked = true;
                 }
+            }
+            let tid = egui::Id::new(("term", id));
+            if focus {
+                ui.memory_mut(|m| m.request_focus(tid));
+            }
+            ui.scope_builder(egui::UiBuilder::new().max_rect(term_rect), |ui| {
                 for o in tab.term.show(ui, tid, &view) {
                     match o {
                         Output::Input(b) => {
                             if tab.status == Status::Closed && b == b"\r" {
-                                reconnect = Some(tab.id);
+                                reconnect = true;
                             } else {
                                 if broadcast {
                                     bc.push(b.clone());
@@ -1131,44 +1469,97 @@ impl App {
                         Output::Resize(s) => tab.send(Cmd::Resize(s.cols as u32, s.rows as u32)),
                     }
                 }
-                // Hinweis bei getrennter Verbindung
-                if tab.status == Status::Closed {
-                    let bar = egui::Rect::from_min_size(
-                        egui::pos2(rect.left() + 14.0, rect.bottom() - 58.0),
-                        vec2(rect.width() - 28.0, 44.0),
-                    );
-                    ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {
-                        egui::Frame::new()
-                            .fill(Color32::from_rgb(0x2a, 0x16, 0x24))
-                            .stroke(Stroke::new(1.0, RED.gamma_multiply(0.6)))
-                            .corner_radius(8)
-                            .inner_margin(Margin::symmetric(12, 6))
-                            .show(ui, |ui| {
-                                ui.horizontal_centered(|ui| {
-                                    ui.label(RichText::new("⚠ Verbindung getrennt").color(Color32::WHITE).strong());
-                                    ui.label(RichText::new("– Enter drückt „Neu verbinden“").color(MUTED));
-                                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                        if ui.button("Tab schließen").clicked() {
-                                            close = Some(tab.id);
-                                        }
-                                        if ui.add(egui::Button::new(RichText::new("⟳ Neu verbinden").color(Color32::WHITE)).fill(ACCENT)).clicked() {
-                                            reconnect = Some(tab.id);
-                                        }
-                                    });
+            });
+            if ui.memory(|m| m.has_focus(tid)) && !active {
+                clicked = true;
+            }
+            if header && active {
+                ui.painter().rect_stroke(rect.shrink(0.5), 0.0, Stroke::new(1.0, ACCENT_HI), egui::StrokeKind::Inside);
+            }
+            // Hinweis bei getrennter Verbindung
+            if tab.status == Status::Closed {
+                let bar = egui::Rect::from_min_size(egui::pos2(rect.left() + 14.0, rect.bottom() - 58.0), vec2(rect.width() - 28.0, 44.0));
+                ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {
+                    egui::Frame::new()
+                        .fill(Color32::from_rgb(0x2a, 0x16, 0x24))
+                        .stroke(Stroke::new(1.0, RED.gamma_multiply(0.6)))
+                        .corner_radius(8)
+                        .inner_margin(Margin::symmetric(12, 6))
+                        .show(ui, |ui| {
+                            ui.horizontal_centered(|ui| {
+                                ui.label(RichText::new(t!("⚠ Verbindung getrennt", "⚠ Disconnected")).color(Color32::WHITE).strong());
+                                if rect.width() > 620.0 {
+                                    ui.label(RichText::new(t!("– Enter drückt „Neu verbinden“", "– press Enter to reconnect")).color(MUTED));
+                                }
+                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                    if ui.button(t!("Tab schließen", "Close tab")).clicked() {
+                                        close = true;
+                                    }
+                                    if ui.add(egui::Button::new(RichText::new(t!("⟳ Neu verbinden", "⟳ Reconnect")).color(Color32::WHITE)).fill(ACCENT)).clicked() {
+                                        reconnect = true;
+                                    }
                                 });
                             });
-                    });
-                }
+                        });
+                });
             }
-            None => self.welcome(ui, rect),
-        }
+        });
         if !bc.is_empty() {
-            let active = self.active;
-            for t in self.tabs.iter().filter(|t| Some(t.id) != active && t.conn.is_some()) {
+            for t in self.tabs.iter().filter(|t| t.id != id && t.conn.is_some()) {
                 for b in &bc {
                     t.send(Cmd::Data(b.clone()));
                 }
             }
+        }
+        (reconnect, close, clicked)
+    }
+
+    fn terminal_area(&mut self, ui: &mut Ui) {
+        let rect = ui.max_rect();
+        let th = theme::by_id(&self.prefs.theme);
+        ui.painter().rect_filled(rect, 0.0, th.bg);
+        let focus = std::mem::take(&mut self.focus_term) && self.dialog.is_none() && self.search.is_none();
+        let panes = self.visible_panes();
+        if panes.is_empty() {
+            self.welcome(ui, rect);
+            return;
+        }
+        let n = panes.len();
+        let rects: Vec<egui::Rect> = if n == 1 {
+            vec![rect]
+        } else {
+            let gap = 2.0;
+            let (cols, rows) = if n == 4 { (2, 2) } else { (n, 1) };
+            let w = (rect.width() - gap * (cols as f32 - 1.0)) / cols as f32;
+            let h = (rect.height() - gap * (rows as f32 - 1.0)) / rows as f32;
+            (0..n)
+                .map(|i| {
+                    let (c, r) = (i % cols, i / cols);
+                    egui::Rect::from_min_size(egui::pos2(rect.left() + c as f32 * (w + gap), rect.top() + r as f32 * (h + gap)), vec2(w, h))
+                })
+                .collect()
+        };
+        if n > 1 {
+            ui.painter().rect_filled(rect, 0.0, LINE);
+        }
+        let mut reconnect = None;
+        let mut close = None;
+        let mut activate = None;
+        for (id, r) in panes.iter().zip(rects) {
+            let is_active = self.active == Some(*id);
+            let (rc, cl, click) = self.pane(ui, *id, r, n > 1, focus && is_active);
+            if rc {
+                reconnect = Some(*id);
+            }
+            if cl {
+                close = Some(*id);
+            }
+            if click && !is_active {
+                activate = Some(*id);
+            }
+        }
+        if let Some(id) = activate {
+            self.active = Some(id);
         }
         if let Some(id) = reconnect {
             self.reconnect(id);
@@ -1181,27 +1572,98 @@ impl App {
         }
     }
 
+    /// Eigene Fenster für herausgelöste Tabs.
+    fn detached_windows(&mut self, ctx: &egui::Context) {
+        let ids: Vec<(u64, egui::Pos2, String)> = self
+            .tabs
+            .iter()
+            .filter_map(|t| t.detached.map(|p| (t.id, p, t.term.title.clone().unwrap_or_else(|| t.title.clone()))))
+            .collect();
+        for (id, pos, title) in ids {
+            let vid = egui::ViewportId::from_hash_of(("tabwin", id));
+            let builder = egui::ViewportBuilder::default()
+                .with_title(format!("{title} – NebulaSSH"))
+                .with_inner_size([900.0, 560.0])
+                .with_min_inner_size([420.0, 260.0])
+                .with_position(pos)
+                .with_icon(Arc::new(crate::icon()));
+            let mut attach = false;
+            let mut close = false;
+            let mut reconnect = false;
+            ctx.show_viewport_immediate(vid, builder, |ui, _class| {
+                if ui.input(|i| i.viewport().close_requested()) {
+                    attach = true;
+                }
+                egui::Panel::top(egui::Id::new(("winbar", id)))
+                    .exact_size(36.0)
+                    .frame(egui::Frame::new().fill(PANEL).stroke(Stroke::new(1.0, LINE)).inner_margin(Margin::symmetric(10, 0)))
+                    .show(ui, |ui| {
+                        ui.horizontal_centered(|ui| {
+                            if let Some(t) = self.tabs.iter().find(|t| t.id == id) {
+                                let (g, f, c) = kind_glyph(&t.host, 12.0);
+                                ui.label(RichText::new(g).font(f).color(c));
+                                ui.label(RichText::new(&t.title).strong().color(Color32::WHITE));
+                                ui.label(RichText::new("●").color(t.status_color()));
+                                ui.label(RichText::new(t.host.subtitle()).size(12.0).color(MUTED));
+                            }
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                if ui.button(t!("⇱ Zurück ins Hauptfenster", "⇱ Back to main window")).clicked() {
+                                    attach = true;
+                                }
+                                if ui.button(t!("⟳ Neu verbinden", "⟳ Reconnect")).clicked() {
+                                    reconnect = true;
+                                }
+                                if ui.button(RichText::new(t!("Schließen", "Close")).color(RED)).clicked() {
+                                    close = true;
+                                }
+                            });
+                        });
+                    });
+                egui::CentralPanel::no_frame().show(ui, |ui| {
+                    let rect = ui.max_rect();
+                    let (rc, cl, _) = self.pane(ui, id, rect, false, false);
+                    reconnect |= rc;
+                    close |= cl;
+                });
+            });
+            if reconnect {
+                self.reconnect(id);
+            }
+            if close {
+                self.close_tab(id, true);
+            } else if attach {
+                self.attach(id);
+            }
+        }
+    }
+
     fn welcome(&mut self, ui: &mut Ui, rect: egui::Rect) {
         let mut action: Option<Host> = None;
         let mut open_keys = false;
         let mut quick = false;
         let mut restore = false;
+        let mut import = false;
         ui.scope_builder(
-            egui::UiBuilder::new().max_rect(egui::Rect::from_center_size(rect.center(), vec2(600.0_f32.min(rect.width() - 40.0), 560.0))),
+            egui::UiBuilder::new().max_rect(egui::Rect::from_center_size(rect.center(), vec2(640.0_f32.min(rect.width() - 40.0), 580.0))),
             |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add(egui::Image::new(&self.logo).fit_to_exact_size(vec2(84.0, 84.0)));
                     ui.add_space(10.0);
-                    ui.label(RichText::new("Willkommen bei NebulaSSH").size(24.0).strong().color(Color32::WHITE));
+                    ui.label(RichText::new(t!("Willkommen bei NebulaSSH", "Welcome to NebulaSSH")).size(24.0).strong().color(Color32::WHITE));
                     ui.add_space(4.0);
-                    ui.label(RichText::new("Verbinde dich links über „Neue Verbindung“ oder wähle ein gespeichertes Gerät.").color(MUTED));
+                    ui.label(
+                        RichText::new(t!(
+                            "Verbinde dich links über „Neue Verbindung“ oder wähle ein gespeichertes Gerät.",
+                            "Connect via \"New connection\" on the left or pick a saved device."
+                        ))
+                        .color(MUTED),
+                    );
                     ui.add_space(22.0);
                 });
-                // Schnellaktionen als Kacheln
                 ui.horizontal(|ui| {
-                    let w = (ui.available_width() - 2.0 * 10.0) / 3.0;
+                    let w = (ui.available_width() - 3.0 * 10.0) / 4.0;
                     ui.spacing_mut().item_spacing.x = 10.0;
-                    let mut tile = |ui: &mut Ui, icon: &str, title: &str, sub: &str, color: Color32| -> bool {
+                    let tile = |ui: &mut Ui, icon: &str, title: &str, sub: &str, color: Color32| -> bool {
                         let r = egui::Frame::new()
                             .fill(PANEL2)
                             .corner_radius(12)
@@ -1224,22 +1686,24 @@ impl App {
                         }
                         r.clicked()
                     };
-                    if tile(ui, "⚡", "Neue Verbindung", "SSH oder COM-Port", ACCENT_HI) {
+                    if tile(ui, "⚡", t!("Neue Verbindung", "New connection"), t!("SSH, Telnet, COM", "SSH, Telnet, COM"), ACCENT_HI) {
                         quick = true;
                     }
-                    if tile(ui, "🔑", "SSH-Key erzeugen", "mit Anleitung", LAVENDER) {
+                    if tile(ui, "📥", t!("Importieren", "Import"), t!("PuTTY, MobaXterm …", "PuTTY, MobaXterm …"), CYAN) {
+                        import = true;
+                    }
+                    if tile(ui, "🔑", t!("SSH-Key erzeugen", "Create SSH key"), t!("mit Anleitung", "with instructions"), LAVENDER) {
                         open_keys = true;
                     }
-                    if tile(ui, "♻", "Backup laden", "vom alten PC", AMBER) {
+                    if tile(ui, "♻", t!("Backup laden", "Load backup"), t!("vom alten PC", "from your old PC"), AMBER) {
                         restore = true;
                     }
                 });
                 ui.add_space(22.0);
-                // Zuletzt verwendet
                 let mut recent: Vec<&Host> = self.hosts.iter().filter(|h| h.last_used > 0).collect();
                 recent.sort_by(|a, b| b.last_used.cmp(&a.last_used));
                 if !recent.is_empty() {
-                    ui.label(RichText::new("Zuletzt verwendet").color(MUTED).strong());
+                    ui.label(RichText::new(t!("Zuletzt verwendet", "Recently used")).color(MUTED).strong());
                     ui.add_space(6.0);
                     for h in recent.into_iter().take(5) {
                         let r = egui::Frame::new()
@@ -1249,7 +1713,7 @@ impl App {
                             .show(ui, |ui| {
                                 ui.set_width(ui.available_width());
                                 ui.horizontal(|ui| {
-                                    crate::sidebar::tile(ui, h.is_serial(), 34.0, false);
+                                    crate::sidebar::tile(ui, h, 34.0, None);
                                     ui.add_space(4.0);
                                     ui.vertical(|ui| {
                                         ui.label(RichText::new(h.display_name()).strong().color(Color32::WHITE));
@@ -1274,11 +1738,12 @@ impl App {
                 }
                 ui.horizontal_wrapped(|ui| {
                     let tips = [
-                        ("Strg+Umschalt+T", "neue Verbindung"),
-                        ("Strg+Tab", "Tab wechseln"),
-                        ("Strg+F", "im Terminal suchen"),
-                        ("Strg+Umschalt+E", "Dateien"),
-                        ("Strg + / −", "Schriftgröße"),
+                        (t!("Strg+Umschalt+T", "Ctrl+Shift+T"), t!("neue Verbindung", "new connection")),
+                        (t!("Strg+Umschalt+P", "Ctrl+Shift+P"), t!("Snippets", "snippets")),
+                        (t!("Strg+Umschalt+S", "Ctrl+Shift+S"), t!("geteilte Ansicht", "split view")),
+                        (t!("Strg+Umschalt+O", "Ctrl+Shift+O"), t!("eigenes Fenster", "own window")),
+                        (t!("Strg+F", "Ctrl+F"), t!("suchen", "search")),
+                        (t!("Strg+Umschalt+E", "Ctrl+Shift+E"), t!("Dateien", "files")),
                     ];
                     for (k, v) in tips {
                         ui.label(RichText::new(k).monospace().color(LAVENDER).size(12.0));
@@ -1286,7 +1751,6 @@ impl App {
                         ui.add_space(8.0);
                     }
                 });
-
             },
         );
         if let Some(h) = action {
@@ -1300,6 +1764,9 @@ impl App {
         }
         if restore {
             self.dialog = Some(Dialog::Backup { export: false, pass1: String::new(), pass2: String::new(), status: None });
+        }
+        if import {
+            self.open_import();
         }
     }
 
@@ -1320,7 +1787,7 @@ impl App {
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             ui.label("🔍");
-                            let r = ui.add(egui::TextEdit::singleline(&mut text).hint_text("Im Terminal suchen…").desired_width(200.0));
+                            let r = ui.add(egui::TextEdit::singleline(&mut text).hint_text(t!("Im Terminal suchen…", "Search terminal…")).desired_width(200.0));
                             if self.search_focus {
                                 r.request_focus();
                                 self.search_focus = false;
@@ -1335,13 +1802,13 @@ impl App {
                             if ui.input(|i| i.key_pressed(Key::Escape)) {
                                 close = true;
                             }
-                            if ui.small_button("⬆").on_hover_text("Vorheriger (Umschalt+Enter)").clicked() {
+                            if ui.small_button("⬆").on_hover_text(t!("Vorheriger (Umschalt+Enter)", "Previous (Shift+Enter)")).clicked() {
                                 find = Some(true);
                             }
-                            if ui.small_button("⬇").on_hover_text("Nächster (Enter)").clicked() {
+                            if ui.small_button("⬇").on_hover_text(t!("Nächster (Enter)", "Next (Enter)")).clicked() {
                                 find = Some(false);
                             }
-                            if ui.small_button(RichText::new("✖").color(RED)).on_hover_text("Schließen (Esc)").clicked() {
+                            if ui.small_button(RichText::new("✖").color(RED)).on_hover_text(t!("Schließen (Esc)", "Close (Esc)")).clicked() {
                                 close = true;
                             }
                         });
@@ -1364,11 +1831,11 @@ impl App {
     fn toast_ui(&mut self, ctx: &egui::Context) {
         let Some((text, at, err)) = self.toast.clone() else { return };
         let age = at.elapsed().as_secs_f32();
-        if age > 3.5 {
+        if age > 4.0 {
             self.toast = None;
             return;
         }
-        let alpha = if age > 3.0 { 1.0 - (age - 3.0) / 0.5 } else { 1.0 };
+        let alpha = if age > 3.5 { 1.0 - (age - 3.5) / 0.5 } else { 1.0 };
         let screen = ctx.content_rect();
         egui::Area::new(egui::Id::new("toast"))
             .order(egui::Order::Tooltip)
@@ -1396,7 +1863,7 @@ impl App {
     fn restore_sessions(&mut self) {
         self.restore_pending = false;
         for h in data::load_sessions() {
-            let secret = if h.auth_method == "key" { String::new() } else { h.pass.clone() };
+            let secret = if h.auth_method == "password" { h.pass.clone() } else { String::new() };
             self.open(h, Some(secret));
         }
     }
@@ -1453,12 +1920,16 @@ impl eframe::App for App {
         }
 
         self.main_ui(ui);
+        self.detached_windows(&ctx);
         self.dialogs(&ctx);
         self.toast_ui(&ctx);
         self.update_title(&ctx);
+        self.pump_transfers();
+        self.poll_stats();
+        self.poll_reach();
 
         // Laufende Übertragungen regelmäßig neu zeichnen
-        if self.transfers.iter().any(|t| matches!(t.state, TransferState::Running)) {
+        if self.transfers.iter().any(|t| t.is_active()) {
             ctx.request_repaint_after(Duration::from_millis(150));
         }
     }
@@ -1470,7 +1941,7 @@ impl eframe::App for App {
                 .iter()
                 .map(|t| {
                     let mut h = t.host.clone();
-                    if h.auth_method != "key" {
+                    if h.auth_method == "password" {
                         h.pass = t.secret.clone();
                     }
                     h

@@ -2,6 +2,7 @@
 //! auf einen anderen PC. Die Datei wird mit einem Backup-Passwort verschlüsselt
 //! (Argon2id + AES-256-GCM), weil der lokale Schlüssel an diesen PC gebunden ist.
 
+use crate::t;
 use crate::storage;
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
@@ -46,7 +47,7 @@ fn count(json: &str) -> usize {
 
 pub fn export(password: &str) -> Result<(Vec<u8>, Summary), String> {
     if password.chars().count() < 8 {
-        return Err("Das Backup-Passwort muss mindestens 8 Zeichen haben.".into());
+        return Err(t!("Das Backup-Passwort muss mindestens 8 Zeichen haben.", "The backup password must have at least 8 characters.").into());
     }
     let mut bundle = Bundle {
         version: 1,
@@ -87,7 +88,7 @@ pub fn export(password: &str) -> Result<(Vec<u8>, Summary), String> {
 /// Stellt ein Backup wieder her. Vorhandene Daten werden ersetzt.
 pub fn import(data: &[u8], password: &str) -> Result<Summary, String> {
     if data.len() < MAGIC.len() + 28 || &data[..MAGIC.len()] != MAGIC {
-        return Err("Das ist keine NebulaSSH-Backup-Datei.".into());
+        return Err(t!("Das ist keine NebulaSSH-Backup-Datei.", "This is not a NebulaSSH backup file.").into());
     }
     let rest = &data[MAGIC.len()..];
     let (salt, rest) = rest.split_at(16);
@@ -97,7 +98,7 @@ pub fn import(data: &[u8], password: &str) -> Result<Summary, String> {
     key.zeroize();
     let mut plain = cipher
         .decrypt(Nonce::from_slice(nonce), ct)
-        .map_err(|_| "Falsches Passwort oder beschädigte Datei.".to_string())?;
+        .map_err(|_| t!("Falsches Passwort oder beschädigte Datei.", "Wrong password or damaged file.").to_string())?;
     let bundle: Bundle = serde_json::from_slice(&plain).map_err(|e| e.to_string())?;
     plain.zeroize();
 

@@ -10,6 +10,7 @@
 //! SHA-256-Prüfsumme haben – so kann weder ein manipulierter Server noch ein
 //! Angreifer im Netzwerk ein fremdes Programm unterschieben.
 
+use crate::t;
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
@@ -79,7 +80,7 @@ fn agent() -> ureq::Agent {
 
 /// Prüft Signatur und Inhalt eines Manifests.
 pub fn verify_manifest(text: &str, public_key_b64: &str) -> Result<Release, String> {
-    let m: Manifest = serde_json::from_str(text).map_err(|_| "Update-Informationen sind beschädigt.".to_string())?;
+    let m: Manifest = serde_json::from_str(text).map_err(|_| t!("Update-Informationen sind beschädigt.", "Update information is damaged.").to_string())?;
     let key_bytes: [u8; 32] = B64
         .decode(public_key_b64.trim())
         .ok()
@@ -90,23 +91,41 @@ pub fn verify_manifest(text: &str, public_key_b64: &str) -> Result<Release, Stri
         .decode(m.signature.trim())
         .ok()
         .and_then(|b| b.try_into().ok())
-        .ok_or("Update-Signatur fehlt oder ist ungültig.")?;
+        .ok_or(t!("Update-Signatur fehlt oder ist ungültig.", "Update signature missing or invalid."))?;
     key.verify(m.payload.as_bytes(), &Signature::from_bytes(&sig_bytes))
-        .map_err(|_| "Update-Signatur stimmt nicht – Update wird aus Sicherheitsgründen ignoriert.".to_string())?;
+        .map_err(|_| t!("Update-Signatur stimmt nicht – Update wird aus Sicherheitsgründen ignoriert.", "Update signature does not match – the update is ignored for security reasons.").to_string())?;
     let r: Release = serde_json::from_str(&m.payload).map_err(|e| e.to_string())?;
     for a in [&r.installer, &r.portable] {
         if a.sha256.len() != 64 || !a.sha256.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Err("Update-Prüfsumme ist ungültig.".into());
+            return Err(t!("Update-Prüfsumme ist ungültig.", "Update checksum is invalid.").into());
         }
     }
     Ok(r)
 }
 
+/// GET mit Wiederholung bei vorübergehenden Server-Fehlern (z.B. GitHub 502/503/504).
+fn get_retry(url: &str) -> Result<ureq::http::Response<ureq::Body>, ureq::Error> {
+    let mut last = None;
+    for attempt in 0..4u64 {
+        if attempt > 0 {
+            std::thread::sleep(Duration::from_millis(800 * attempt * attempt));
+        }
+        match agent().get(url).call() {
+            Ok(r) => return Ok(r),
+            Err(ureq::Error::StatusCode(code)) if (500..600).contains(&code) || code == 429 => {
+                last = Some(ureq::Error::StatusCode(code));
+            }
+            Err(ureq::Error::Io(e)) => last = Some(ureq::Error::Io(e)),
+            Err(ureq::Error::Timeout(t)) => last = Some(ureq::Error::Timeout(t)),
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last.expect("mindestens ein Versuch"))
+}
+
 /// Lädt und prüft das Manifest. `Ok(None)` = schon aktuell.
 pub fn check(url: &str, current: &str, public_key_b64: &str) -> Result<Option<Release>, String> {
-    let text = agent()
-        .get(url)
-        .call()
+    let text = get_retry(url)
         .map_err(|e| format!("Update-Server nicht erreichbar: {e}"))?
         .body_mut()
         .with_config()
@@ -128,10 +147,7 @@ pub struct DownloadProgress {
 /// Lädt eine Datei herunter und prüft die SHA-256-Prüfsumme.
 /// Erst nach erfolgreicher Prüfung erhält die Datei ihren endgültigen Namen.
 pub fn download(asset: &Asset, target: &Path, progress: Arc<DownloadProgress>) -> Result<PathBuf, String> {
-    let mut resp = agent()
-        .get(&asset.url)
-        .call()
-        .map_err(|e| format!("Download fehlgeschlagen: {e}"))?;
+    let mut resp = get_retry(&asset.url).map_err(|e| format!("Download fehlgeschlagen: {e}"))?;
     progress.total.store(asset.size, Ordering::Relaxed);
     let part = target.with_extension("part");
     let mut file = std::fs::File::create(&part).map_err(|e| e.to_string())?;
@@ -157,7 +173,7 @@ pub fn download(asset: &Asset, target: &Path, progress: Arc<DownloadProgress>) -
     let digest: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
     if !digest.eq_ignore_ascii_case(&asset.sha256) {
         let _ = std::fs::remove_file(&part);
-        return Err("Die heruntergeladene Datei ist beschädigt oder manipuliert (Prüfsumme stimmt nicht). Update abgebrochen.".into());
+        return Err(t!("Die heruntergeladene Datei ist beschädigt oder manipuliert (Prüfsumme stimmt nicht). Update abgebrochen.", "The downloaded file is damaged or tampered with (checksum mismatch). Update cancelled.").into());
     }
     let _ = std::fs::remove_file(target);
     std::fs::rename(&part, target).map_err(|e| e.to_string())?;
@@ -245,6 +261,25 @@ mod tests {
     fn release() -> Release {
         let a = Asset { url: "http://x/a".into(), sha256: "a".repeat(64), size: 1 };
         Release { version: "9.9.9".into(), date: "2026-11-08".into(), notes: "Test".into(), installer: a.clone(), portable: a, critical: false }
+    }
+
+    /// Prüft das echte veröffentlichte Release: Signatur + Download beider Dateien + Prüfsummen.
+    /// NEBULA_UPDATE_URL=... cargo test -p nebula-core live_release -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn live_release() {
+        let url = std::env::var("NEBULA_UPDATE_URL").unwrap();
+        let key = include_str!("../../native/update_public_key.txt");
+        let r = check(&url, "0.0.1", key).unwrap().expect("Release gefunden");
+        println!("Release {} – Signatur gültig", r.version);
+        for a in [&r.installer, &r.portable] {
+            let t = std::env::temp_dir().join("nebula_live_check.bin");
+            download(a, &t, Arc::new(DownloadProgress::default())).unwrap();
+            println!("  {} – Prüfsumme stimmt ({} Bytes)", a.url, a.size);
+            let _ = std::fs::remove_file(t);
+        }
+        // Eine aktuelle Installation soll nichts angeboten bekommen
+        assert!(check(&url, &r.version, key).unwrap().is_none());
     }
 
     /// Prüft, dass GitHub-Weiterleitungen (latest/download -> Datei-Server) verfolgt werden.

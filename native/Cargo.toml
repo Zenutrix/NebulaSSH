@@ -1,6 +1,6 @@
 [package]
 name = "nebulassh"
-version = "2.2.0"
+version = "2.3.0"
 edition = "2021"
 description = "NebulaSSH – nativer SSH-, SFTP- und Serial-Client für Windows"
 authors = ["Thomas Schöpf"]

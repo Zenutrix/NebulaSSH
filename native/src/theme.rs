@@ -83,3 +83,16 @@ pub const THEMES: &[Theme] = &[
 pub fn by_id(id: &str) -> &'static Theme {
     THEMES.iter().find(|t| t.id == id).unwrap_or(&THEMES[0])
 }
+
+impl Theme {
+    /// Anzeigename in der aktuellen Sprache
+    pub fn label(&self) -> &'static str {
+        use nebula_core::t;
+        match self.id {
+            "nebula" => t!("Nebula (Standard)", "Nebula (default)"),
+            "matrix" => t!("Konsole Grün", "Console green"),
+            "light" => t!("Hell", "Light"),
+            _ => self.name,
+        }
+    }
+}

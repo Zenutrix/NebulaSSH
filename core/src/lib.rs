@@ -4,10 +4,15 @@
 //! über [`Cmd`]s an die jeweilige Sitzung.
 
 pub mod backup;
+pub mod i18n;
+pub mod import;
 pub mod keys;
+pub mod net;
 pub mod serial;
 pub mod ssh;
+pub mod stats;
 pub mod storage;
+pub mod telnet;
 pub mod update;
 
 use std::sync::Arc;

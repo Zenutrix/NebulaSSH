@@ -6,7 +6,10 @@ mod clipboard;
 mod data;
 mod dialogs;
 mod files;
+mod importer;
 mod sidebar;
+mod snippets;
+mod sync;
 mod terminal;
 mod theme;
 mod updater;
@@ -134,7 +137,27 @@ fn icon() -> egui::IconData {
     }
 }
 
+/// Schreibt Abstürze nach crash.log im Datenordner – im Release-Build gibt es keine Konsole.
+fn install_crash_log() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let bt = std::backtrace::Backtrace::force_capture();
+        let line = format!(
+            "[{}] NebulaSSH {} abgestürzt: {info}\n{bt}\n\n",
+            data::now(),
+            env!("CARGO_PKG_VERSION")
+        );
+        let path = nebula_core::storage::data_dir().join("crash.log");
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            use std::io::Write;
+            let _ = f.write_all(line.as_bytes());
+        }
+        default(info);
+    }));
+}
+
 fn main() -> eframe::Result {
+    install_crash_log();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("NebulaSSH")
@@ -151,6 +174,9 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             setup_fonts(&cc.egui_ctx);
             setup_style(&cc.egui_ctx);
+            // egui beendet sonst bei Strg+Q – auf deutschen Tastaturen ist Strg+Alt+Q aber „@“,
+            // und im Terminal gehört Strg+Q (XON) dem Server.
+            cc.egui_ctx.options_mut(|o| o.quit_shortcuts.clear());
             Ok(Box::new(app::App::new(cc)))
         }),
     )

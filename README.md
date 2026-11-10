@@ -1,14 +1,26 @@
-# NebulaSSH 2.1
+# NebulaSSH 2.3
 
-Nativer SSH-, SFTP- und Serial-Client für Windows – komplett in **Rust**, ohne WebView.
+Nativer SSH-, SFTP-, Telnet- und Serial-Client für Windows – komplett in **Rust**, ohne WebView.
+Oberfläche auf Deutsch und Englisch.
+
+## Funktionen
+
+- SSH mit Host-Key-Prüfung, Passwort, Key oder SSH-Agent (Pageant, Windows-OpenSSH-Agent, 1Password, KeePassXC)
+- Jump-Host (ProxyJump), Port-Weiterleitung (-L, -R, SOCKS -D), Agent- und X11-Weiterleitung
+- Telnet und serielle COM-Ports
+- SFTP-Explorer mit Editor, Drag & Drop, Ordnervergleich/Synchronisation und Übertragungs-Warteschlange
+- Geteilte Ansicht (bis zu 4 Terminals), Tabs als eigene Fenster
+- Snippets mit Platzhaltern, Broadcast an alle Tabs, Server-Auslastung in der Statusleiste
+- Import aus PuTTY, MobaXterm und `~/.ssh/config`; Wake-on-LAN, Ping und Port-Prüfung
+- Verschlüsselte Ablage, App-Sperre, verschlüsseltes Backup, signierte Auto-Updates
 by Thomas Schöpf
 
 ## Projektstruktur
 
 | Ordner | Inhalt |
 |---|---|
-| `core/` | Kern-Bibliothek: SSH (`ssh.rs`), Serial (`serial.rs`), verschlüsselte Ablage (`storage.rs`), SSH-Key-Generator (`keys.rs`), Backup & App-Sperre (`backup.rs`) |
-| `native/` | Die Windows-App (egui + alacritty_terminal): `app.rs` (Logik, Startbildschirm, Sperre), `terminal.rs`, `sidebar.rs`, `files.rs` (SFTP-Explorer), `dialogs.rs`, `theme.rs` |
+| `core/` | Kern-Bibliothek: SSH inkl. Tunnel/Jump/Agent/X11 (`ssh.rs`), Telnet (`telnet.rs`), Serial (`serial.rs`), Import (`import.rs`), Server-Kennzahlen (`stats.rs`), Wake-on-LAN/Ping (`net.rs`), Sprache (`i18n.rs`), verschlüsselte Ablage (`storage.rs`), SSH-Key-Generator (`keys.rs`), Backup & App-Sperre (`backup.rs`) |
+| `native/` | Die Windows-App (egui + alacritty_terminal): `app.rs` (Logik, geteilte Ansicht, eigene Fenster), `terminal.rs`, `sidebar.rs`, `files.rs` (SFTP-Explorer, Warteschlange), `sync.rs`, `importer.rs`, `snippets.rs` (Snippets, Tunnel-Dialog), `dialogs.rs`, `theme.rs` |
 | `branding/` | Logo (`logo.svg`) und Installer-Grafiken; `cargo run -p brand` erzeugt daraus `branding/out/` |
 | `installer/` | NSIS-Skript (`nebulassh.nsi`) und Build-Skript (`build.ps1`) |
 | `website/` | Produkt-Website mit echten Screenshots und Downloads |
@@ -65,6 +77,7 @@ Sicherheitsupdates: `cargo run -p release -- manifest <version> <url> <notizen> 
 cargo test                       # Unit-Tests (Kern + App)
 # Integrationstests gegen einen echten SSH-Server, z.B.:
 # docker run -d -p 127.0.0.1:2222:2222 -e PASSWORD_ACCESS=true -e USER_NAME=nebula -e USER_PASSWORD=nebulatest lscr.io/linuxserver/openssh-server
+# (für Tunnel-Tests: -e DOCKER_MODS=linuxserver/mods:openssh-server-ssh-tunnel)
 NEBULA_TEST_SSH="127.0.0.1:2222|nebula|nebulatest" cargo test -p nebula-core -- --ignored --test-threads=1
 ```
 
@@ -72,7 +85,7 @@ NEBULA_TEST_SSH="127.0.0.1:2222|nebula|nebulatest" cargo test -p nebula-core -- 
 
 - **Installiert:** `%APPDATA%\NebulaSSH` – **Portable:** neben der EXE (falls beschreibbar)
 - `hosts.json`, `keys.json`, `sessions.json`: AES-256-GCM-verschlüsselt, Schlüssel in der Windows-Anmeldeinformationsverwaltung (`NebulaSSH:encryption_key`, kompatibel zu 1.x)
-- `settings.json` (Einstellungen, Makros), `known_hosts.json` (Host-Fingerprints), `logs/` (optional)
+- `settings.json` (Einstellungen, Snippets), `known_hosts.json` (Host-Fingerprints), `logs/` (optional)
 - Umzug auf einen neuen PC: Einstellungen → Daten & Backup → Backup erstellen (`.nebula`, Argon2id + AES-256-GCM)
 
 ## Tastenkürzel
@@ -86,6 +99,9 @@ NEBULA_TEST_SSH="127.0.0.1:2222|nebula|nebulatest" cargo test -p nebula-core -- 
 | Strg+Umschalt+R | Neu verbinden |
 | Strg+Umschalt+E | Datei-Explorer |
 | Strg+Umschalt+B | Seitenleiste ein/aus |
+| Strg+Umschalt+P | Snippets (Befehlsbibliothek) |
+| Strg+Umschalt+S | Geteilte Ansicht ein/aus |
+| Strg+Umschalt+O | Tab in eigenem Fenster |
 | Strg+F | Im Terminal suchen |
 | Strg + / − / 0 | Schriftgröße |
 | Umschalt+Bild↑/↓, Umschalt+Pos1/Ende | Im Verlauf scrollen |
