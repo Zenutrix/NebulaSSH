@@ -1,8 +1,9 @@
-//! Hauptfenster von NebulaSSH: Zustand, Verbindungslogik und Grundlayout.
+﻿//! Hauptfenster von NebulaSSH: Zustand, Verbindungslogik und Grundlayout.
 
 use crate::data::{self, BaudProfile, Host, Prefs, Snippet, SshKey};
 use crate::terminal::{Output, Size, Terminal, View};
 use crate::theme;
+pub(crate) use crate::icons::{self, Icon};
 use eframe::egui::{self, vec2, Align, Color32, FontId, Key, Layout, Margin, Modifiers, RichText, Stroke, Ui};
 use nebula_core::net::Reach;
 use nebula_core::ssh::{self, FileInfo, Forward, SshSession};
@@ -162,6 +163,8 @@ pub enum Msg {
     TunnelOpened(u64, String, Result<(), String>),
     SyncCompared(u64, Result<Vec<crate::sync::Row>, String>),
     AgentKeys(Result<Vec<(String, String, String)>, String>),
+    /// Neuer Server: Fingerprint bestätigen lassen (Host, Fingerprint, Antwort)
+    HostKey(String, String, mpsc::Sender<bool>),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -251,6 +254,8 @@ pub struct App {
     pub search_miss: bool,
     pub focus_term: bool,
     pub dialog: Option<Dialog>,
+    /// Offene Host-Key-Abfrage (Host, Fingerprint, Antwort)
+    pub host_key: Option<(String, String, mpsc::Sender<bool>)>,
     pub transfers: Vec<crate::files::Transfer>,
     pub pending_backup: Option<bool>,
     pub update: crate::updater::UpdateState,
@@ -321,12 +326,12 @@ fn strip_ansi(data: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Gerätetyp als kleines Symbol (Text, Schrift, Farbe)
-pub fn kind_glyph(h: &Host, size: f32) -> (&'static str, FontId, Color32) {
+/// Gerätetyp als Icon mit Farbe
+pub fn kind_icon(h: &Host) -> (Icon, Color32) {
     match h.kind.as_str() {
-        "serial" => ("🔌", FontId::proportional(size), AMBER),
-        "telnet" => ("T", FontId::monospace(size * 0.95), CYAN),
-        _ => (">_", FontId::monospace(size * 0.95), LAVENDER),
+        "serial" => (Icon::Plug, AMBER),
+        "telnet" => (Icon::Server, CYAN),
+        _ => (Icon::Terminal, LAVENDER),
     }
 }
 
@@ -391,6 +396,7 @@ impl App {
             search_miss: false,
             focus_term: false,
             dialog: None,
+            host_key: None,
             transfers: Vec::new(),
             pending_backup: None,
             update: crate::updater::UpdateState::Idle,
@@ -611,17 +617,15 @@ impl App {
             keepalive_secs: self.prefs.keepalive,
             legacy_algorithms: self.prefs.legacy_algorithms,
             verify_new_host: self.prefs.verify_new_hosts.then(|| {
-                let v: ssh::Verifier = Arc::new(|host: String, fp: String| {
-                    MessageDialog::new()
-                        .set_level(MessageLevel::Warning)
-                        .set_title(t!("Neuer Server – Host-Key prüfen", "New server – verify host key"))
-                        .set_description(tf!(
-                            "Mit {host} wurde noch nie verbunden.\n\nFingerprint des Servers:\n{fp}\n\nStimmt dieser Fingerprint mit dem des Servers überein?\n(Auf dem Server: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub)\n\nDem Server vertrauen und verbinden?",
-                            "You have never connected to {host}.\n\nServer fingerprint:\n{fp}\n\nDoes this fingerprint match the server's?\n(On the server: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub)\n\nTrust the server and connect?"
-                        ))
-                        .set_buttons(MessageButtons::YesNo)
-                        .show()
-                        == MessageDialogResult::Yes
+                // Die Abfrage läuft im eigenen Dialog der App; der Verbindungs-Thread wartet auf die Antwort.
+                let (tx, ctx) = (Mutex::new(self.tx.clone()), self.ctx.clone());
+                let v: ssh::Verifier = Arc::new(move |host: String, fp: String| {
+                    let (reply, answer) = mpsc::channel();
+                    if tx.lock().unwrap().send(Msg::HostKey(host, fp, reply)).is_err() {
+                        return false;
+                    }
+                    ctx.request_repaint();
+                    answer.recv().unwrap_or(false)
                 });
                 v
             }),
@@ -986,6 +990,10 @@ impl App {
                             s.on_compared(res);
                         }
                     }
+                }
+                Msg::HostKey(host, fp, reply) => {
+                    // Eine ältere, unbeantwortete Abfrage gilt als abgelehnt
+                    self.host_key = Some((host, fp, reply));
                 }
                 Msg::AgentKeys(res) => {
                     if let Some(Dialog::Keys { agent, .. }) = &mut self.dialog {
@@ -1600,17 +1608,17 @@ impl App {
                     .show(ui, |ui| {
                         ui.horizontal_centered(|ui| {
                             if let Some(t) = self.tabs.iter().find(|t| t.id == id) {
-                                let (g, f, c) = kind_glyph(&t.host, 12.0);
-                                ui.label(RichText::new(g).font(f).color(c));
+                                let (ic, c) = kind_icon(&t.host);
+                                icons::show(ui, ic, 15.0, c);
                                 ui.label(RichText::new(&t.title).strong().color(Color32::WHITE));
                                 ui.label(RichText::new("●").color(t.status_color()));
                                 ui.label(RichText::new(t.host.subtitle()).size(12.0).color(MUTED));
                             }
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                if ui.button(t!("⇱ Zurück ins Hauptfenster", "⇱ Back to main window")).clicked() {
+                                if icons::menu(ui, Icon::Window, t!("Zurück ins Hauptfenster", "Back to main window")).clicked() {
                                     attach = true;
                                 }
-                                if ui.button(t!("⟳ Neu verbinden", "⟳ Reconnect")).clicked() {
+                                if icons::menu(ui, Icon::Refresh, t!("Neu verbinden", "Reconnect")).clicked() {
                                     reconnect = true;
                                 }
                                 if ui.button(RichText::new(t!("Schließen", "Close")).color(RED)).clicked() {
@@ -1663,7 +1671,7 @@ impl App {
                 ui.horizontal(|ui| {
                     let w = (ui.available_width() - 3.0 * 10.0) / 4.0;
                     ui.spacing_mut().item_spacing.x = 10.0;
-                    let tile = |ui: &mut Ui, icon: &str, title: &str, sub: &str, color: Color32| -> bool {
+                    let tile = |ui: &mut Ui, icon: Icon, title: &str, sub: &str, color: Color32| -> bool {
                         let r = egui::Frame::new()
                             .fill(PANEL2)
                             .corner_radius(12)
@@ -1672,8 +1680,10 @@ impl App {
                                 ui.set_width(w - 28.0);
                                 ui.vertical(|ui| {
                                     ui.spacing_mut().item_spacing.y = 2.0;
-                                    ui.label(RichText::new(icon).size(22.0).color(color));
-                                    ui.add_space(6.0);
+                                    let (r, _) = ui.allocate_exact_size(vec2(38.0, 38.0), egui::Sense::hover());
+                                    ui.painter().rect_filled(r, 10.0, color.gamma_multiply(0.16));
+                                    icons::paint(ui, egui::Rect::from_center_size(r.center(), vec2(20.0, 20.0)), icon, color);
+                                    ui.add_space(8.0);
                                     ui.label(RichText::new(title).strong().color(Color32::WHITE));
                                     ui.label(RichText::new(sub).size(11.5).color(MUTED));
                                 });
@@ -1686,16 +1696,16 @@ impl App {
                         }
                         r.clicked()
                     };
-                    if tile(ui, "⚡", t!("Neue Verbindung", "New connection"), t!("SSH, Telnet, COM", "SSH, Telnet, COM"), ACCENT_HI) {
+                    if tile(ui, Icon::Bolt, t!("Neue Verbindung", "New connection"), t!("SSH, Telnet, COM", "SSH, Telnet, COM"), Color32::from_rgb(0xa3, 0x84, 0xff)) {
                         quick = true;
                     }
-                    if tile(ui, "📥", t!("Importieren", "Import"), t!("PuTTY, MobaXterm …", "PuTTY, MobaXterm …"), CYAN) {
+                    if tile(ui, Icon::Import, t!("Importieren", "Import"), t!("PuTTY, MobaXterm …", "PuTTY, MobaXterm …"), CYAN) {
                         import = true;
                     }
-                    if tile(ui, "🔑", t!("SSH-Key erzeugen", "Create SSH key"), t!("mit Anleitung", "with instructions"), LAVENDER) {
+                    if tile(ui, Icon::Key, t!("SSH-Key erzeugen", "Create SSH key"), t!("mit Anleitung", "with instructions"), LAVENDER) {
                         open_keys = true;
                     }
-                    if tile(ui, "♻", t!("Backup laden", "Load backup"), t!("vom alten PC", "from your old PC"), AMBER) {
+                    if tile(ui, Icon::History, t!("Backup laden", "Load backup"), t!("vom alten PC", "from your old PC"), AMBER) {
                         restore = true;
                     }
                 });
@@ -1786,7 +1796,7 @@ impl App {
                     .shadow(egui::Shadow { offset: [0, 4], blur: 16, spread: 0, color: Color32::from_black_alpha(120) })
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            ui.label("🔍");
+                            icons::show(ui, Icon::Search, 15.0, MUTED);
                             let r = ui.add(egui::TextEdit::singleline(&mut text).hint_text(t!("Im Terminal suchen…", "Search terminal…")).desired_width(200.0));
                             if self.search_focus {
                                 r.request_focus();
@@ -1922,6 +1932,7 @@ impl eframe::App for App {
         self.main_ui(ui);
         self.detached_windows(&ctx);
         self.dialogs(&ctx);
+        self.host_key_dialog(&ctx);
         self.toast_ui(&ctx);
         self.update_title(&ctx);
         self.pump_transfers();
@@ -1956,3 +1967,4 @@ impl eframe::App for App {
         }
     }
 }
+

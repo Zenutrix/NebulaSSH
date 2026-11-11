@@ -142,16 +142,16 @@ impl App {
     /// Kleiner Hinweis in der Statusleiste.
     pub fn update_badge(&mut self, ui: &mut Ui) {
         let label = match &self.update {
-            UpdateState::Available(r) => tf!("⬆ Update {} verfügbar", "⬆ Update {} available", r.version),
+            UpdateState::Available(r) => tf!("Update {} verfügbar", "Update {} available", r.version),
             UpdateState::Downloading { progress, .. } => {
                 let total = progress.total.load(Ordering::Relaxed).max(1);
                 let pct = progress.done.load(Ordering::Relaxed) * 100 / total;
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
-                format!("⬇ Update {pct} %")
+                format!("Update {pct} %")
             }
             _ => return,
         };
-        let b = egui::Button::new(RichText::new(label).strong().color(Color32::BLACK)).fill(AMBER);
+        let b = egui::Button::image_and_text(icons::image(ui.ctx(), Icon::ArrowUpCircle, 15.0, Color32::BLACK), RichText::new(label).strong().color(Color32::BLACK)).fill(AMBER);
         if ui.add(b).on_hover_text(t!("Details und Installation", "Details and installation")).clicked() {
             self.dialog = Some(Dialog::Update);
         }
@@ -282,40 +282,46 @@ impl App {
 
     /// Bereich auf der Einstellungsseite "Über".
     pub fn update_settings(&mut self, ui: &mut Ui, prefs: &mut crate::data::Prefs) {
-        ui.add_space(16.0);
-        ui.separator();
-        ui.add_space(8.0);
-        ui.label(RichText::new("Updates").size(12.0).color(MUTED).strong());
-        ui.checkbox(&mut prefs.update_check, t!("Beim Start automatisch nach Updates suchen", "Check for updates on start"));
-        ui.horizontal(|ui| {
-            let busy = matches!(self.update, UpdateState::Checking { .. } | UpdateState::Downloading { .. });
-            if ui.add_enabled(!busy, egui::Button::new(t!("Jetzt nach Updates suchen", "Check for updates now"))).clicked() {
+        use crate::dialogs::{divider, group, row, switch};
+        group(ui, "Updates", |ui| {
+            row(ui, t!("Automatisch suchen", "Check automatically"), t!("Beim Start nach einer neuen Version schauen", "Look for a new version on start"), |ui| {
+                switch(ui, &mut prefs.update_check);
+            });
+            divider(ui);
+            let status: (Option<Icon>, String, Color32) = match &self.update {
+                UpdateState::Checking { .. } => (None, t!("Suche…", "Checking…").to_string(), MUTED),
+                UpdateState::UpToDate(_) => (Some(Icon::CheckCircle), tf!("Version {VERSION} ist aktuell", "Version {VERSION} is up to date"), GREEN),
+                UpdateState::Available(r) => (Some(Icon::ArrowUpCircle), tf!("Version {} verfügbar", "Version {} available", r.version), AMBER),
+                UpdateState::Error(e) => (Some(Icon::Warning), e.clone(), RED),
+                _ => (None, String::new(), MUTED),
+            };
+            let checking = matches!(self.update, UpdateState::Checking { .. });
+            let mut check = false;
+            row(ui, t!("Jetzt prüfen", "Check now"), &status.1, |ui| {
+                let busy = matches!(self.update, UpdateState::Checking { .. } | UpdateState::Downloading { .. });
+                if ui.add_enabled(!busy, egui::Button::image_and_text(icons::image(ui.ctx(), Icon::Refresh, 14.0, Color32::WHITE), t!("Nach Updates suchen", "Check for updates"))).clicked() {
+                    check = true;
+                }
+                if checking {
+                    ui.spinner();
+                } else if let Some(i) = status.0 {
+                    icons::show(ui, i, 16.0, status.2);
+                }
+            });
+            if check {
                 // Geänderte Adresse sofort verwenden
                 self.prefs.update_url = prefs.update_url.clone();
                 self.check_updates(true);
             }
-            match &self.update {
-                UpdateState::Checking { .. } => {
-                    ui.spinner();
-                    ui.label(RichText::new(t!("Suche…", "Checking…")).color(MUTED));
-                }
-                UpdateState::UpToDate(_) => {
-                    ui.label(RichText::new(tf!("✔ Version {VERSION} ist aktuell", "✔ Version {VERSION} is up to date")).color(GREEN));
-                }
-                UpdateState::Available(r) => {
-                    ui.label(RichText::new(tf!("Version {} verfügbar", "Version {} available", r.version)).color(AMBER));
-                }
-                UpdateState::Error(e) => {
-                    ui.label(RichText::new(format!("✖ {e}")).color(RED).size(12.0));
-                }
-                _ => {}
-            }
-        });
-        egui::CollapsingHeader::new(RichText::new(t!("Erweitert", "Advanced")).size(12.5)).id_salt("upd_adv").show(ui, |ui| {
-            ui.label(RichText::new(t!("Update-Adresse (leer = Standard)", "Update address (empty = default)")).size(12.0).color(MUTED));
-            let hint = DEFAULT_URL.trim();
-            ui.add(egui::TextEdit::singleline(&mut prefs.update_url).hint_text(if hint.is_empty() { "https://…/update.json" } else { hint }).desired_width(f32::INFINITY));
-            ui.label(RichText::new(t!("Updates werden nur installiert, wenn sie mit dem Signierschlüssel von Thomas Schöpf signiert sind.", "Updates are only installed if they are signed with Thomas Schöpf's signing key.")).size(11.5).color(MUTED));
+            divider(ui);
+            egui::CollapsingHeader::new(RichText::new(t!("Erweitert", "Advanced")).size(12.5).color(Color32::from_gray(200))).id_salt("upd_adv").show(ui, |ui| {
+                ui.label(RichText::new(t!("Update-Adresse (leer = Standard)", "Update address (empty = default)")).size(12.0).color(MUTED));
+                let hint = DEFAULT_URL.trim();
+                ui.add(egui::TextEdit::singleline(&mut prefs.update_url).hint_text(if hint.is_empty() { "https://…/update.json" } else { hint }).desired_width(f32::INFINITY));
+                ui.add_space(4.0);
+                ui.label(RichText::new(t!("Updates werden nur installiert, wenn sie mit dem Signierschlüssel von Thomas Schöpf signiert sind.", "Updates are only installed if they are signed with Thomas Schöpf's signing key.")).size(11.5).color(MUTED));
+                ui.add_space(6.0);
+            });
         });
     }
 }

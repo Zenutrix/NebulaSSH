@@ -1,4 +1,4 @@
-//! SFTP-Datei-Explorer: Liste mit Spalten, Navigation, Drag & Drop und Übertragungs-Warteschlange
+﻿//! SFTP-Datei-Explorer: Liste mit Spalten, Navigation, Drag & Drop und Übertragungs-Warteschlange
 //! (pausieren, fortsetzen, abbrechen, wiederholen).
 
 use crate::app::*;
@@ -101,22 +101,21 @@ fn fmt_time(ts: Option<u32>) -> String {
     }
 }
 
-fn file_icon(f: &FileInfo) -> &'static str {
+fn file_icon(f: &FileInfo) -> Icon {
     if f.name == ".." {
-        return "⮤";
+        return Icon::ArrowUp;
     }
     if f.is_dir {
-        return "📁";
+        return Icon::Folder;
     }
     let ext = f.name.rsplit('.').next().unwrap_or("").to_lowercase();
     match ext.as_str() {
-        "sh" | "bash" | "py" | "pl" | "rb" | "js" | "ts" | "rs" | "go" | "c" | "h" | "cpp" | "php" => "📜",
-        "conf" | "cfg" | "ini" | "yml" | "yaml" | "toml" | "json" | "xml" | "env" => "⚙",
-        "log" | "txt" | "md" => "📄",
-        "zip" | "gz" | "tgz" | "tar" | "xz" | "bz2" | "7z" | "deb" | "rpm" => "📦",
-        "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "ico" => "🖼",
-        "key" | "pem" | "crt" | "pub" => "🔐",
-        _ => "📄",
+        "sh" | "bash" | "py" | "pl" | "rb" | "js" | "ts" | "rs" | "go" | "c" | "h" | "cpp" | "php" => Icon::Code,
+        "conf" | "cfg" | "ini" | "yml" | "yaml" | "toml" | "json" | "xml" | "env" => Icon::Settings,
+        "zip" | "gz" | "tgz" | "tar" | "xz" | "bz2" | "7z" | "deb" | "rpm" => Icon::Archive,
+        "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "ico" => Icon::Image,
+        "key" | "pem" | "crt" | "pub" => Icon::Key,
+        _ => Icon::File,
     }
 }
 
@@ -388,10 +387,11 @@ impl App {
 
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.label(RichText::new(t!("📂 Dateien", "📂 Files")).strong().size(15.0).color(Color32::WHITE));
+            icons::show(ui, Icon::Folder, 17.0, AMBER);
+            ui.label(RichText::new(t!("Dateien", "Files")).strong().size(15.0).color(Color32::WHITE));
             ui.label(RichText::new(t.host.subtitle()).size(12.0).color(MUTED));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.add(egui::Button::new(RichText::new("✖").color(MUTED)).frame(false)).on_hover_text(t!("Schließen", "Close")).clicked() {
+                if icons::button(ui, Icon::Close, t!("Schließen", "Close")).clicked() {
                     act = Some(A::Close);
                 }
             });
@@ -412,17 +412,17 @@ impl App {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             if ui
-                .add_enabled_ui(!t.sftp.history.is_empty(), |ui| ui.add_sized(vec2(32.0, 28.0), egui::Button::new("⬅")))
+                .add_enabled_ui(!t.sftp.history.is_empty(), |ui| icon_button(ui, Icon::Back, ""))
                 .inner
                 .on_hover_text(t!("Zurück", "Back"))
                 .clicked()
             {
                 act = Some(A::Back);
             }
-            if icon_button(ui, "⬆", t!("Übergeordneter Ordner", "Parent folder")).clicked() {
+            if icon_button(ui, Icon::ArrowUp, t!("Übergeordneter Ordner", "Parent folder")).clicked() {
                 act = Some(A::Up);
             }
-            if icon_button(ui, "🏠", t!("Home-Verzeichnis", "Home directory")).clicked() {
+            if icon_button(ui, Icon::Home, t!("Home-Verzeichnis", "Home directory")).clicked() {
                 act = Some(A::Home);
             }
             let w = crate::sidebar::fill_width(ui, 2);
@@ -467,35 +467,35 @@ impl App {
                         });
                 });
             }
-            if icon_button(ui, "✎", t!("Pfad eingeben", "Enter path")).clicked() {
+            if icon_button(ui, Icon::Pencil, t!("Pfad eingeben", "Enter path")).clicked() {
                 t.sftp.editing_path = !t.sftp.editing_path;
                 t.sftp.path_edit = t.sftp.path.clone();
             }
-            if icon_button(ui, "⟳", t!("Aktualisieren", "Refresh")).clicked() {
+            if icon_button(ui, Icon::Refresh, t!("Aktualisieren", "Refresh")).clicked() {
                 act = Some(A::Reload);
             }
         });
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            if ui.button(t!("⬆ Hochladen", "⬆ Upload")).on_hover_text(t!("Dateien hochladen – oder einfach ins Fenster ziehen", "Upload files – or just drag them into the window")).clicked() {
+            if icons::menu(ui, Icon::Export, t!("Hochladen", "Upload")).on_hover_text(t!("Dateien hochladen – oder einfach ins Fenster ziehen", "Upload files – or just drag them into the window")).clicked() {
                 act = Some(A::Upload);
             }
-            if ui.button(t!("⬆ Ordner", "⬆ Folder")).on_hover_text(t!("Ganzen Ordner hochladen", "Upload a whole folder")).clicked() {
+            if icons::menu(ui, Icon::Export, t!("Ordner", "Folder")).on_hover_text(t!("Ganzen Ordner hochladen", "Upload a whole folder")).clicked() {
                 act = Some(A::UploadDir);
             }
-            if ui.button(t!("+ Ordner", "+ Folder")).on_hover_text(t!("Neuer Ordner", "New folder")).clicked() {
+            if icons::menu(ui, Icon::Folder, t!("Neuer Ordner", "New folder")).on_hover_text(t!("Neuer Ordner", "New folder")).clicked() {
                 act = Some(A::MkDir);
             }
-            if ui.button(t!("+ Datei", "+ File")).clicked() {
+            if icons::menu(ui, Icon::File, t!("Neue Datei", "New file")).clicked() {
                 act = Some(A::NewFile);
             }
-            if ui.button(t!("⇅ Vergleichen", "⇅ Compare")).on_hover_text(t!("Diesen Ordner mit einem lokalen Ordner vergleichen und synchronisieren", "Compare and sync this folder with a local folder")).clicked() {
+            if icons::menu(ui, Icon::Tunnel, t!("Vergleichen", "Compare")).on_hover_text(t!("Diesen Ordner mit einem lokalen Ordner vergleichen und synchronisieren", "Compare and sync this folder with a local folder")).clicked() {
                 act = Some(A::Sync);
             }
         });
         ui.horizontal(|ui| {
             ui.checkbox(&mut t.sftp.show_hidden, t!("Versteckte", "Hidden")).on_hover_text(t!("Dateien mit . am Anfang anzeigen", "Show files starting with ."));
-            ui.add(TextEdit::singleline(&mut t.sftp.filter).hint_text(t!("🔍 Filter", "🔍 Filter")).desired_width(ui.available_width()));
+            ui.add(TextEdit::singleline(&mut t.sftp.filter).hint_text(t!("Filter", "Filter")).desired_width(f32::INFINITY));
         });
         if let Some(e) = &t.sftp.error {
             ui.label(RichText::new(format!("⚠ {e}")).color(RED).size(12.0));
@@ -565,7 +565,8 @@ impl App {
                     Color32::from_gray(150)
                 };
                 let clip = ui.painter().with_clip_rect(egui::Rect::from_min_size(rect.min, vec2(cols[0] - 6.0, 26.0)));
-                clip.text(rect.left_center() + vec2(9.0, 0.0), Align2::LEFT_CENTER, file_icon(f), FontId::proportional(14.0), icon_col);
+                let icon_rect = egui::Rect::from_center_size(rect.left_center() + vec2(16.0, 0.0), vec2(15.0, 15.0));
+                icons::paint(ui, icon_rect, file_icon(f), icon_col);
                 clip.text(rect.left_center() + vec2(32.0, 0.0), Align2::LEFT_CENTER, name, FontId::proportional(13.5), name_col);
                 if !f.is_dir {
                     ui.painter().text(pos2(rect.left() + cols[0] + 6.0, rect.center().y), Align2::LEFT_CENTER, human_size(f.size), FontId::proportional(12.0), MUTED);
@@ -582,35 +583,35 @@ impl App {
                     let full = join(&path, &f.name);
                     resp.context_menu(|ui| {
                         if f.is_dir {
-                            if ui.button(t!("📂  Öffnen", "📂  Open")).clicked() {
+                            if icons::menu(ui, Icon::Folder, t!("Öffnen", "Open")).clicked() {
                                 act = Some(A::Open((*f).clone()));
                             }
-                            if ui.button(t!("⌨  Im Terminal öffnen (cd)", "⌨  Open in terminal (cd)")).clicked() {
+                            if icons::menu(ui, Icon::Terminal, t!("Im Terminal öffnen (cd)", "Open in terminal (cd)")).clicked() {
                                 act = Some(A::Cd(full.clone()));
                             }
-                            if ui.button(t!("⬇  Ordner herunterladen…", "⬇  Download folder…")).clicked() {
+                            if icons::menu(ui, Icon::Download, t!("Ordner herunterladen…", "Download folder…")).clicked() {
                                 act = Some(A::Download((*f).clone()));
                             }
                         } else {
-                            if ui.button(t!("📝  Bearbeiten", "📝  Edit")).clicked() {
+                            if icons::menu(ui, Icon::Pencil, t!("Bearbeiten", "Edit")).clicked() {
                                 act = Some(A::Edit((*f).clone()));
                             }
-                            if ui.button(t!("⬇  Herunterladen…", "⬇  Download…")).clicked() {
+                            if icons::menu(ui, Icon::Download, t!("Herunterladen…", "Download…")).clicked() {
                                 act = Some(A::Download((*f).clone()));
                             }
                         }
                         ui.separator();
-                        if ui.button(t!("✎  Umbenennen…", "✎  Rename…")).clicked() {
+                        if icons::menu(ui, Icon::Pencil, t!("Umbenennen…", "Rename…")).clicked() {
                             act = Some(A::Rename(f.name.clone()));
                         }
-                        if ui.button(t!("🔐  Rechte ändern…", "🔐  Change permissions…")).clicked() {
+                        if icons::menu(ui, Icon::Lock, t!("Rechte ändern…", "Change permissions…")).clicked() {
                             act = Some(A::Chmod((*f).clone()));
                         }
-                        if ui.button(t!("📋  Pfad kopieren", "📋  Copy path")).clicked() {
+                        if icons::menu(ui, Icon::Copy, t!("Pfad kopieren", "Copy path")).clicked() {
                             act = Some(A::CopyPath(full.clone()));
                         }
                         ui.separator();
-                        if ui.button(RichText::new(t!("🗑  Löschen…", "🗑  Delete…")).color(RED)).clicked() {
+                        if icons::menu_colored(ui, Icon::Trash, t!("Löschen…", "Delete…"), RED).clicked() {
                             act = Some(A::Delete((*f).clone()));
                         }
                     });

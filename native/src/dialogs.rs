@@ -30,9 +30,10 @@ fn buttons(ui: &mut Ui, ok: &str, enabled: bool) -> Option<bool> {
     res
 }
 
-fn heading(ui: &mut Ui, icon: &str, text: &str) {
+pub fn heading(ui: &mut Ui, icon: Icon, text: &str) {
     ui.horizontal(|ui| {
-        ui.label(RichText::new(icon).size(20.0));
+        crate::sidebar::badge_icon(ui, icon, 32.0, LAVENDER);
+        ui.add_space(2.0);
         ui.label(RichText::new(text).size(19.0).family(egui::FontFamily::Name("ui-bold".into())).color(Color32::WHITE));
     });
     ui.add_space(12.0);
@@ -75,6 +76,107 @@ fn page_tabs<T: PartialEq + Copy>(ui: &mut Ui, page: &mut T, pages: &[(T, &str)]
 }
 
 impl App {
+    /// Neuer Server: Fingerprint prüfen und vertrauen – als eigener Dialog im App-Design.
+    pub fn host_key_dialog(&mut self, ctx: &egui::Context) {
+        let Some((host, fp, _)) = &self.host_key else { return };
+        let (host, fp) = (host.clone(), fp.clone());
+        let mut answer: Option<bool> = None;
+        let mut copied = None;
+        let frame = egui::Frame::new()
+            .fill(Color32::from_rgb(0x1a, 0x1a, 0x26))
+            .stroke(Stroke::new(1.0, LINE))
+            .corner_radius(14)
+            .inner_margin(24)
+            .shadow(egui::Shadow { offset: [0, 10], blur: 40, spread: 0, color: Color32::from_black_alpha(160) });
+        egui::Modal::new(egui::Id::new("host_key"))
+            .frame(frame)
+            .backdrop_color(Color32::from_black_alpha(170))
+            .show(ctx, |ui| {
+                ui.set_width(500.0);
+                ui.horizontal(|ui| {
+                    crate::sidebar::badge_icon(ui, Icon::Shield, 40.0, AMBER);
+                    ui.add_space(4.0);
+                    ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = 2.0;
+                        ui.label(RichText::new(t!("Neuer Server", "New server")).size(19.0).family(egui::FontFamily::Name("ui-bold".into())).color(Color32::WHITE));
+                        ui.label(RichText::new(tf!("Mit {host} wurde noch nie verbunden", "You have never connected to {host}")).color(MUTED));
+                    });
+                });
+                ui.add_space(16.0);
+                ui.label(RichText::new(t!("Fingerprint des Servers", "Server fingerprint")).size(12.5).strong().color(Color32::from_gray(170)));
+                ui.add_space(4.0);
+                let code_row = |ui: &mut Ui, text: &str, copy_tip: &str| -> bool {
+                    let mut clicked = false;
+                    egui::Frame::new().fill(BG).stroke(Stroke::new(1.0, Color32::from_rgb(0x2a, 0x2a, 0x3d))).corner_radius(9).inner_margin(egui::Margin { left: 12, right: 6, top: 6, bottom: 6 }).show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.horizontal(|ui| {
+                            ui.add(egui::Label::new(RichText::new(text).monospace().size(12.5).color(LAVENDER)).wrap());
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                if icons::button(ui, Icon::Copy, copy_tip).clicked() {
+                                    clicked = true;
+                                }
+                            });
+                        });
+                    });
+                    clicked
+                };
+                if code_row(ui, &fp, t!("Fingerprint kopieren", "Copy fingerprint")) {
+                    copied = Some(fp.clone());
+                }
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    icons::show(ui, Icon::Info, 15.0, MUTED);
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(t!(
+                                "Vergleiche ihn mit dem Fingerprint, den der Server selbst anzeigt. Stimmt er nicht überein, könnte jemand die Verbindung abfangen.",
+                                "Compare it with the fingerprint the server shows itself. If it doesn't match, someone could be intercepting the connection."
+                            ))
+                            .size(12.0)
+                            .color(MUTED),
+                        )
+                        .wrap(),
+                    );
+                });
+                ui.add_space(8.0);
+                ui.label(RichText::new(t!("Auf dem Server anzeigen", "Show on the server")).size(12.5).strong().color(Color32::from_gray(170)));
+                ui.add_space(4.0);
+                let cmd = "ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub";
+                if code_row(ui, cmd, t!("Befehl kopieren", "Copy command")) {
+                    copied = Some(cmd.to_string());
+                }
+                ui.add_space(20.0);
+                ui.horizontal(|ui| {
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let trust = egui::Button::image_and_text(
+                            icons::image(ui.ctx(), Icon::Check, 15.0, Color32::WHITE),
+                            RichText::new(t!("Vertrauen & verbinden", "Trust & connect")).strong().color(Color32::WHITE),
+                        )
+                        .fill(ACCENT)
+                        .min_size(vec2(190.0, 36.0));
+                        if ui.add(trust).clicked() {
+                            answer = Some(true);
+                        }
+                        if ui.add(egui::Button::new(RichText::new(t!("Abbrechen", "Cancel")).strong()).min_size(vec2(110.0, 36.0))).clicked() {
+                            answer = Some(false);
+                        }
+                    });
+                });
+                if ui.input(|i| i.key_pressed(Key::Escape)) {
+                    answer = Some(false);
+                }
+            });
+        if let Some(text) = copied {
+            ctx.copy_text(text);
+            self.notify(t!("Kopiert", "Copied"));
+        }
+        if let Some(a) = answer {
+            if let Some((_, _, reply)) = self.host_key.take() {
+                let _ = reply.send(a);
+            }
+        }
+    }
+
     pub fn open_settings(&mut self, page: SettingsPage) {
         self.dialog = Some(Dialog::Settings { page, prefs: self.prefs.clone(), lock1: String::new(), lock2: String::new() });
     }
@@ -165,7 +267,7 @@ impl App {
             .show(ctx, |ui| match &mut dialog {
                 Dialog::AddBaud { name, rate } => {
                     ui.set_width(360.0);
-                    heading(ui, "🔌", t!("Neues Baudrate-Profil", "New baud rate profile"));
+                    heading(ui, Icon::Plug, t!("Neues Baudrate-Profil", "New baud rate profile"));
                     field(ui, t!("Geräteklasse / Name (optional)", "Device class / name (optional)"), name, t!("z.B. Cisco Switch", "e.g. Cisco switch"));
                     field(ui, t!("Baudrate *", "Baud rate *"), rate, t!("z.B. 115200", "e.g. 115200"));
                     ui.add_space(8.0);
@@ -196,7 +298,7 @@ impl App {
                     ui.set_width(w);
                     let dirty = content != original;
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("📝").size(18.0));
+                        icons::show(ui, Icon::File, 18.0, LAVENDER);
                         ui.label(RichText::new(path.as_str()).monospace().size(14.0).color(Color32::WHITE));
                         if dirty {
                             ui.label(RichText::new(t!("● ungespeichert", "● unsaved")).color(AMBER).size(12.0));
@@ -247,7 +349,7 @@ impl App {
                             close = true;
                         }
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            let label = if *saving { t!("Speichere…", "Saving…") } else { t!("💾 Speichern", "💾 Save") };
+                            let label = if *saving { t!("Speichere…", "Saving…") } else { t!("Speichern", "Save") };
                             if primary(ui, label, 150.0).clicked() {
                                 save = true;
                             }
@@ -288,7 +390,7 @@ impl App {
                 }
                 Dialog::Rename { tab, old, new } => {
                     ui.set_width(380.0);
-                    heading(ui, "✎", t!("Umbenennen", "Rename"));
+                    heading(ui, Icon::Pencil, t!("Umbenennen", "Rename"));
                     let r = field(ui, &tf!("Neuer Name für „{old}“", "New name for \"{old}\""), new, "");
                     r.request_focus();
                     let enter = (r.lost_focus() || r.has_focus()) && ui.input(|i| i.key_pressed(Key::Enter));
@@ -306,7 +408,7 @@ impl App {
                 }
                 Dialog::MkDir { tab, name } => {
                     ui.set_width(380.0);
-                    heading(ui, "📁", t!("Neuer Ordner", "New folder"));
+                    heading(ui, Icon::Folder, t!("Neuer Ordner", "New folder"));
                     let r = field(ui, t!("Ordnername", "Folder name"), name, t!("z.B. backup", "e.g. backup"));
                     r.request_focus();
                     let enter = (r.lost_focus() || r.has_focus()) && ui.input(|i| i.key_pressed(Key::Enter));
@@ -324,7 +426,7 @@ impl App {
                 }
                 Dialog::NewFile { tab, name } => {
                     ui.set_width(380.0);
-                    heading(ui, "📄", t!("Neue Datei", "New file"));
+                    heading(ui, Icon::File, t!("Neue Datei", "New file"));
                     let r = field(ui, t!("Dateiname", "File name"), name, t!("z.B. notizen.txt", "e.g. notes.txt"));
                     r.request_focus();
                     let enter = (r.lost_focus() || r.has_focus()) && ui.input(|i| i.key_pressed(Key::Enter));
@@ -342,7 +444,7 @@ impl App {
                 }
                 Dialog::Chmod { tab, path, name, mode } => {
                     ui.set_width(380.0);
-                    heading(ui, "🔐", t!("Rechte ändern", "Change permissions"));
+                    heading(ui, Icon::Lock, t!("Rechte ändern", "Change permissions"));
                     ui.label(RichText::new(name.as_str()).monospace());
                     ui.add_space(8.0);
                     let mut bits: Vec<u32> = mode.chars().filter_map(|c| c.to_digit(8)).collect();
@@ -390,7 +492,7 @@ impl App {
                     ui.set_width(600.0);
                     match result {
                         None => {
-                            heading(ui, "🔑", t!("Neuen SSH-Key erzeugen", "Create a new SSH key"));
+                            heading(ui, Icon::Key, t!("Neuen SSH-Key erzeugen", "Create a new SSH key"));
                             label(ui, t!("Schlüsseltyp", "Key type"));
                             ui.horizontal(|ui| {
                                 for k in [keys::KeyType::Ed25519, keys::KeyType::Rsa4096, keys::KeyType::EcdsaP256] {
@@ -444,19 +546,19 @@ impl App {
                             }
                         }
                         Some(k) => {
-                            heading(ui, "✅", t!("SSH-Key erzeugt", "SSH key created"));
+                            heading(ui, Icon::CheckCircle, t!("SSH-Key erzeugt", "SSH key created"));
                             ui.label(RichText::new(tf!("Gespeichert als „{}“ · {}", "Saved as \"{}\" · {}", name, k.fingerprint)).color(MUTED).size(12.0));
                             ui.add_space(10.0);
                             section(ui, t!("1. Public Key (öffentlich – darf weitergegeben werden)", "1. Public key (public – may be shared)"));
                             code_box(ui, &k.public_line, 2);
                             ui.horizontal(|ui| {
-                                if ui.button(t!("📋 Public Key kopieren", "📋 Copy public key")).clicked() {
+                                if icons::menu(ui, Icon::Copy, t!("Public Key kopieren", "Copy public key")).clicked() {
                                     ctx.copy_text(k.public_line.clone());
                                     self.notify(t!("Public Key kopiert", "Public key copied"));
                                 }
                                 let has_ssh = self.active_ssh().is_some();
                                 if ui
-                                    .add_enabled(has_ssh, egui::Button::new(RichText::new(t!("⚡ Auf verbundenem Server hinterlegen", "⚡ Install on connected server")).color(Color32::WHITE)).fill(ACCENT))
+                                    .add_enabled(has_ssh, egui::Button::image_and_text(icons::image(ui.ctx(), Icon::Export, 14.0, Color32::WHITE), RichText::new(t!("Auf verbundenem Server hinterlegen", "Install on connected server")).color(Color32::WHITE)).fill(ACCENT))
                                     .on_disabled_hover_text(t!("Zuerst per SSH mit dem Server verbinden", "Connect to the server via SSH first"))
                                     .clicked()
                                 {
@@ -471,7 +573,7 @@ impl App {
                             section(ui, t!("2. Manuell auf einem Linux-Server hinterlegen", "2. Install manually on a Linux server"));
                             let instr = keys::install_instructions(&k.public_line);
                             code_box(ui, &instr, 8);
-                            if ui.button(t!("📋 Befehle kopieren", "📋 Copy commands")).clicked() {
+                            if icons::menu(ui, Icon::Copy, t!("Befehle kopieren", "Copy commands")).clicked() {
                                 ctx.copy_text(instr);
                                 self.notify(t!("Befehle kopiert", "Commands copied"));
                             }
@@ -487,7 +589,7 @@ impl App {
                             );
                             ui.add_space(12.0);
                             ui.horizontal(|ui| {
-                                if ui.button(t!("💾 Key exportieren…", "💾 Export key…")).clicked() {
+                                if icons::menu(ui, Icon::Download, t!("Key exportieren…", "Export key…")).clicked() {
                                     let key = SshKey { name: name.clone(), content: k.private_openssh.clone() };
                                     self.export_key(&key);
                                 }
@@ -502,14 +604,14 @@ impl App {
                 }
                 Dialog::ImportKey { name, content } => {
                     ui.set_width(520.0);
-                    heading(ui, "📥", t!("SSH-Key importieren", "Import SSH key"));
+                    heading(ui, Icon::Import, t!("SSH-Key importieren", "Import SSH key"));
                     field(ui, t!("Name *", "Name *"), name, t!("z.B. Produktion", "e.g. production"));
                     label(ui, "Private Key");
                     ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
                         ui.add(TextEdit::multiline(content).font(egui::TextStyle::Monospace).hint_text("-----BEGIN OPENSSH PRIVATE KEY-----").desired_rows(9).desired_width(f32::INFINITY));
                     });
                     ui.add_space(6.0);
-                    if ui.button(t!("📄 Aus Datei laden (id_ed25519, id_rsa, .pem)", "📄 Load from file (id_ed25519, id_rsa, .pem)")).clicked() {
+                    if icons::menu(ui, Icon::File, t!("Aus Datei laden (id_ed25519, id_rsa, .pem)", "Load from file (id_ed25519, id_rsa, .pem)")).clicked() {
                         if let Some(p) = rfd::FileDialog::new().set_title(t!("Private Key auswählen", "Choose private key")).pick_file() {
                             match std::fs::metadata(&p) {
                                 Ok(m) if m.len() > 1024 * 1024 => alert("SSH-Key", t!("Die Datei ist zu groß für einen SSH-Key.", "The file is too large for an SSH key.")),
@@ -536,9 +638,9 @@ impl App {
                         );
                     } else if !content.trim().is_empty() {
                         match keys::public_from_private(content) {
-                            Ok((_, fp)) => ui.label(RichText::new(tf!("✔ Gültiger Key · {fp}", "✔ Valid key · {fp}")).color(GREEN).size(12.0)),
+                            Ok((_, fp)) => ui.label(RichText::new(tf!("Gültiger Key · {fp}", "Valid key · {fp}")).color(GREEN).size(12.0)),
                             Err(_) if keys::is_encrypted(content) => ui.label(
-                                RichText::new(t!("🔒 Verschlüsselter Key – Passphrase wird beim Verbinden abgefragt", "🔒 Encrypted key – the passphrase is asked for when connecting")).color(AMBER).size(12.0),
+                                RichText::new(t!("Verschlüsselter Key – Passphrase wird beim Verbinden abgefragt", "Encrypted key – the passphrase is asked for when connecting")).color(AMBER).size(12.0),
                             ),
                             Err(e) => ui.label(RichText::new(format!("✖ {e}")).color(RED).size(12.0)),
                         };
@@ -564,7 +666,7 @@ impl App {
                 Dialog::Backup { export, pass1, pass2, status } => {
                     ui.set_width(460.0);
                     if *export {
-                        heading(ui, "📦", t!("Backup erstellen", "Create backup"));
+                        heading(ui, Icon::Export, t!("Backup erstellen", "Create backup"));
                         ui.label(
                             RichText::new(t!(
                                 "Sichert alle Geräte, SSH-Keys, Snippets, Einstellungen und bekannten Host-Keys in eine verschlüsselte Datei – ideal für den Umzug auf einen neuen PC.",
@@ -581,7 +683,7 @@ impl App {
                         }
                         ui.label(RichText::new(t!("Ohne dieses Passwort lässt sich das Backup nicht wiederherstellen.", "The backup cannot be restored without this password.")).size(11.5).color(AMBER));
                     } else {
-                        heading(ui, "♻", t!("Backup wiederherstellen", "Restore backup"));
+                        heading(ui, Icon::History, t!("Backup wiederherstellen", "Restore backup"));
                         ui.label(RichText::new(t!("Achtung: Vorhandene Geräte, Keys und Einstellungen auf diesem PC werden ersetzt.", "Warning: existing devices, keys and settings on this PC will be replaced.")).color(AMBER));
                         ui.add_space(10.0);
                         label(ui, t!("Backup-Passwort", "Backup password"));
@@ -641,7 +743,7 @@ impl App {
                         (true, true) => t!("Passphrase für den Jump-Host-Key", "Passphrase for the jump host key"),
                         (false, true) => t!("Passwort für den Jump-Host", "Password for the jump host"),
                     };
-                    heading(ui, "🔒", head);
+                    heading(ui, Icon::Lock, head);
                     ui.label(RichText::new(tf!("Verbindung: {title}", "Connection: {title}")).color(MUTED));
                     if *jump {
                         ui.label(RichText::new(tf!("Jump-Host: {}", "Jump host: {}", jump_name.clone().unwrap_or_default())).color(MUTED));
@@ -717,11 +819,7 @@ impl App {
     ) -> bool {
         let mut keep = true;
         ui.set_width(540.0);
-        let icon = match host.kind.as_str() {
-            "serial" => "🔌",
-            "telnet" => "🖧",
-            _ => "🖥",
-        };
+        let icon = kind_icon(host).0;
         heading(ui, icon, if index.is_some() { t!("Gerät bearbeiten", "Edit device") } else { t!("Neues Gerät", "New device") });
         let mut pages = vec![(HostPage::General, t!("Allgemein", "General"))];
         if host.is_ssh() {
@@ -942,7 +1040,7 @@ impl App {
     fn keys_dialog(&mut self, ui: &mut Ui, selected: &mut Option<usize>, agent: &mut Option<Result<Vec<(String, String, String)>, String>>) -> bool {
         let mut keep = true;
         ui.set_width(620.0);
-        heading(ui, "🔑", t!("SSH-Keys", "SSH keys"));
+        heading(ui, Icon::Key, t!("SSH-Keys", "SSH keys"));
         ui.horizontal(|ui| {
             if ui.add(egui::Button::new(RichText::new(t!("✨ Neuen Key erzeugen", "✨ Create new key")).color(Color32::WHITE)).fill(ACCENT)).clicked() {
                 self.open_keygen();
@@ -1003,7 +1101,7 @@ impl App {
             ui.label(RichText::new(tf!("Ausgewählt: {}", "Selected: {}", k.name)).strong());
             ui.horizontal_wrapped(|ui| {
                 if let Ok((line, _)) = keys::public_from_private(&k.content) {
-                    if ui.button(t!("📋 Public Key kopieren", "📋 Copy public key")).clicked() {
+                    if icons::menu(ui, Icon::Copy, t!("Public Key kopieren", "Copy public key")).clicked() {
                         ui.ctx().copy_text(line.clone());
                         self.notify(t!("Public Key kopiert", "Public key copied"));
                     }
@@ -1080,264 +1178,398 @@ impl App {
 
     fn settings_dialog(&mut self, ui: &mut Ui, page: &mut SettingsPage, p: &mut data::Prefs, lock1: &mut String, lock2: &mut String) -> bool {
         let mut keep = true;
-        ui.set_width(720.0);
-        heading(ui, "⚙", t!("Einstellungen", "Settings"));
-        ui.allocate_ui_with_layout(vec2(720.0, 450.0), Layout::left_to_right(Align::Min), |ui| {
-            ui.vertical(|ui| {
-                ui.set_width(160.0);
-                for (pg, label) in [
-                    (SettingsPage::Terminal, t!("🖥  Terminal", "🖥  Terminal")),
-                    (SettingsPage::Connection, t!("🌐  Verbindung", "🌐  Connection")),
-                    (SettingsPage::Security, t!("🛡  Sicherheit", "🛡  Security")),
-                    (SettingsPage::Sessions, t!("🗂  Sitzungen", "🗂  Sessions")),
-                    (SettingsPage::Backup, t!("📦  Daten & Backup", "📦  Data & backup")),
-                    (SettingsPage::About, t!("ℹ  Über", "ℹ  About")),
-                ] {
-                    let on = *page == pg;
-                    let b = egui::Button::new(RichText::new(label).color(if on { Color32::WHITE } else { Color32::from_gray(200) }))
-                        .fill(if on { ACCENT } else { Color32::TRANSPARENT })
-                        .min_size(vec2(160.0, 32.0));
-                    if ui.add(b).clicked() {
-                        *page = pg;
+        const W: f32 = 880.0;
+        const H: f32 = 520.0;
+        const NAV: f32 = 210.0;
+        ui.set_width(W);
+        let pages = [
+            (SettingsPage::Terminal, Icon::Terminal, t!("Terminal", "Terminal"), t!("Sprache, Schrift, Farben und Verhalten", "Language, font, colors and behavior")),
+            (SettingsPage::Connection, Icon::Globe, t!("Verbindung", "Connection"), t!("SSH, X11 und Dateiübertragung", "SSH, X11 and file transfer")),
+            (SettingsPage::Security, Icon::Shield, t!("Sicherheit", "Security"), t!("Server-Identität, Zwischenablage und App-Sperre", "Server identity, clipboard and app lock")),
+            (SettingsPage::Sessions, Icon::Clock, t!("Sitzungen", "Sessions"), t!("Verhalten beim Start und Protokollierung", "Start-up behavior and logging")),
+            (SettingsPage::Backup, Icon::Archive, t!("Daten & Backup", "Data & backup"), t!("Backup, Umzug und Speicherort", "Backup, moving and storage location")),
+            (SettingsPage::About, Icon::Info, t!("Über & Updates", "About & updates"), t!("Version und automatische Updates", "Version and automatic updates")),
+        ];
+        ui.allocate_ui_with_layout(vec2(W, H), Layout::left_to_right(Align::Min), |ui| {
+            // ---------- Navigation ----------
+            egui::Frame::new().fill(Color32::from_rgb(0x15, 0x15, 0x20)).corner_radius(12).inner_margin(10).show(ui, |ui| {
+                ui.set_width(NAV - 20.0);
+                ui.set_height(H - 20.0);
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.add_space(4.0);
+                        icons::show(ui, Icon::Settings, 18.0, LAVENDER);
+                        ui.label(RichText::new(t!("Einstellungen", "Settings")).size(17.0).family(egui::FontFamily::Name("ui-bold".into())).color(Color32::WHITE));
+                    });
+                    ui.add_space(14.0);
+                    ui.spacing_mut().item_spacing.y = 3.0;
+                    for (pg, icon, label, _) in pages {
+                        let on = *page == pg;
+                        let (rect, resp) = ui.allocate_exact_size(vec2(NAV - 20.0, 36.0), egui::Sense::click());
+                        let hov = resp.hovered();
+                        if on {
+                            ui.painter().rect_filled(rect, 8.0, Color32::from_rgb(0x2a, 0x1c, 0x52));
+                            let bar = egui::Rect::from_min_size(rect.min + vec2(0.0, 9.0), vec2(3.0, 18.0));
+                            ui.painter().rect_filled(bar, 2.0, ACCENT_HI);
+                        } else if hov {
+                            ui.painter().rect_filled(rect, 8.0, icons::HOVER_BG);
+                        }
+                        let col = if on { LAVENDER } else if hov { Color32::WHITE } else { Color32::from_rgb(0xa9, 0xa7, 0xc2) };
+                        icons::paint(ui, egui::Rect::from_center_size(rect.left_center() + vec2(22.0, 0.0), vec2(17.0, 17.0)), icon, col);
+                        ui.painter().text(
+                            rect.left_center() + vec2(42.0, 0.0),
+                            egui::Align2::LEFT_CENTER,
+                            label,
+                            egui::FontId::proportional(14.0),
+                            if on || hov { Color32::WHITE } else { Color32::from_gray(205) },
+                        );
+                        if hov {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+                        if resp.clicked() {
+                            *page = pg;
+                        }
                     }
-                }
+                    ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
+                        ui.horizontal(|ui| {
+                            ui.add_space(6.0);
+                            ui.label(RichText::new(format!("NebulaSSH {VERSION}")).size(11.5).color(Color32::from_gray(110)));
+                        });
+                    });
+                });
             });
-            ui.add_space(14.0);
-            ScrollArea::vertical().max_height(450.0).auto_shrink([false, false]).show(ui, |ui| {
-                ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                    ui.set_width(530.0);
+            ui.add_space(22.0);
+
+            // ---------- Inhalt ----------
+            ui.vertical(|ui| {
+                let cw = W - NAV - 22.0;
+                ui.set_width(cw);
+                let (_, _, title, sub) = pages.iter().find(|x| x.0 == *page).copied().unwrap_or(pages[0]);
+                ui.add_space(4.0);
+                ui.label(RichText::new(title).size(21.0).family(egui::FontFamily::Name("ui-bold".into())).color(Color32::WHITE));
+                ui.label(RichText::new(sub).size(12.5).color(MUTED));
+                ui.add_space(12.0);
+                ScrollArea::vertical().max_height(H - 66.0).auto_shrink([false, false]).show(ui, |ui| {
+                    ui.set_width(cw - 14.0);
                     match page {
                         SettingsPage::Terminal => {
-                            section(ui, t!("Sprache", "Language"));
-                            ui.horizontal(|ui| {
-                                ui.selectable_value(&mut p.language, "auto".into(), t!("Automatisch (Windows)", "Automatic (Windows)"));
-                                ui.selectable_value(&mut p.language, "de".into(), "Deutsch");
-                                ui.selectable_value(&mut p.language, "en".into(), "English");
-                            });
-                            ui.add_space(10.0);
-                            section(ui, t!("Darstellung", "Appearance"));
-                            ui.add(egui::Slider::new(&mut p.font_size, 9.0..=28.0).text(t!("Schriftgröße", "Font size")).step_by(1.0));
-                            ui.add_space(6.0);
-                            ui.horizontal(|ui| {
-                                ui.label(t!("Farbschema", "Color scheme"));
-                                egui::ComboBox::from_id_salt("theme").selected_text(theme::by_id(&p.theme).label()).show_ui(ui, |ui| {
-                                    for t in theme::THEMES {
-                                        ui.selectable_value(&mut p.theme, t.id.to_string(), t.label());
-                                    }
+                            group(ui, t!("Sprache", "Language"), |ui| {
+                                row(ui, t!("Oberfläche", "Interface"), t!("Gilt nach „Übernehmen“", "Applies after \"Apply\""), |ui| {
+                                    let ids = ["auto", "de", "en"];
+                                    let cur = ids.iter().position(|x| *x == p.language).unwrap_or(0);
+                                    ui.allocate_ui_with_layout(vec2(290.0, 30.0), Layout::left_to_right(Align::Center), |ui| {
+                                        if let Some(i) = segmented(ui, &[t!("Automatisch", "Automatic"), "Deutsch", "English"], cur) {
+                                            p.language = ids[i].into();
+                                        }
+                                    });
                                 });
                             });
-                            let th = theme::by_id(&p.theme);
-                            egui::Frame::new().fill(th.bg).corner_radius(6).inner_margin(8).show(ui, |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new("user@server:~$ ").monospace().color(th.ansi[10]));
-                                    ui.label(RichText::new("ls ").monospace().color(th.fg));
-                                    ui.label(RichText::new(t!("ordner ", "folder ")).monospace().color(th.ansi[12]));
-                                    ui.label(RichText::new(t!("fehler ", "error ")).monospace().color(th.ansi[9]));
-                                    ui.label(RichText::new(t!("warnung", "warning")).monospace().color(th.ansi[11]));
+                            group(ui, t!("Darstellung", "Appearance"), |ui| {
+                                row(ui, t!("Schriftgröße", "Font size"), t!("Im Terminal, in Punkt", "In the terminal, in points"), |ui| {
+                                    ui.add(egui::Slider::new(&mut p.font_size, 9.0..=28.0).step_by(1.0).custom_formatter(|v, _| format!("{v:.0} pt")));
+                                });
+                                divider(ui);
+                                row(ui, t!("Farbschema", "Color scheme"), t!("Farben für Text und Hintergrund", "Colors for text and background"), |ui| {
+                                    egui::ComboBox::from_id_salt("theme").width(200.0).selected_text(theme::by_id(&p.theme).label()).show_ui(ui, |ui| {
+                                        for t in theme::THEMES {
+                                            ui.selectable_value(&mut p.theme, t.id.to_string(), t.label());
+                                        }
+                                    });
+                                });
+                                let th = theme::by_id(&p.theme);
+                                egui::Frame::new().fill(th.bg).corner_radius(8).stroke(Stroke::new(1.0, LINE)).inner_margin(egui::Margin::symmetric(12, 10)).show(ui, |ui| {
+                                    ui.set_width(ui.available_width());
+                                    ui.horizontal(|ui| {
+                                        ui.spacing_mut().item_spacing.x = 0.0;
+                                        ui.label(RichText::new("user@server:~$ ").monospace().color(th.ansi[10]));
+                                        ui.label(RichText::new("ls  ").monospace().color(th.fg));
+                                        ui.label(RichText::new(t!("ordner  ", "folder  ")).monospace().color(th.ansi[12]));
+                                        ui.label(RichText::new(t!("fehler  ", "error  ")).monospace().color(th.ansi[9]));
+                                        ui.label(RichText::new(t!("warnung", "warning")).monospace().color(th.ansi[11]));
+                                    });
+                                });
+                                ui.add_space(6.0);
+                                divider(ui);
+                                row(ui, "Cursor", t!("Form der Schreibmarke", "Shape of the text cursor"), |ui| {
+                                    let ids = ["block", "beam", "underline"];
+                                    let cur = ids.iter().position(|x| *x == p.cursor).unwrap_or(0);
+                                    ui.allocate_ui_with_layout(vec2(290.0, 30.0), Layout::left_to_right(Align::Center), |ui| {
+                                        if let Some(i) = segmented(ui, &[t!("Block", "Block"), t!("Strich", "Beam"), t!("Unterstrich", "Underline")], cur) {
+                                            p.cursor = ids[i].into();
+                                        }
+                                    });
                                 });
                             });
-                            ui.add_space(6.0);
-                            ui.horizontal(|ui| {
-                                ui.label("Cursor");
-                                ui.selectable_value(&mut p.cursor, "block".into(), t!("█ Block", "█ Block"));
-                                ui.selectable_value(&mut p.cursor, "beam".into(), t!("▏ Strich", "▏ Beam"));
-                                ui.selectable_value(&mut p.cursor, "underline".into(), t!("▁ Unterstrich", "▁ Underline"));
+                            group(ui, t!("Verhalten", "Behavior"), |ui| {
+                                row(ui, t!("Markieren kopiert", "Copy on select"), t!("Markierter Text landet sofort in der Zwischenablage", "Selected text goes straight to the clipboard"), |ui| {
+                                    switch(ui, &mut p.copy_on_select);
+                                });
+                                divider(ui);
+                                row(ui, t!("Rechtsklick fügt ein", "Right-click pastes"), t!("Wie in PuTTY", "Like in PuTTY"), |ui| {
+                                    switch(ui, &mut p.right_click_paste);
+                                });
+                                divider(ui);
+                                row(ui, t!("Verlauf", "Scrollback"), t!("Zeilen, die nach oben gescrollt erhalten bleiben", "Lines kept when scrolling up"), |ui| {
+                                    ui.add(egui::DragValue::new(&mut p.scrollback).range(1_000..=1_000_000).speed(1000).suffix(t!(" Zeilen", " lines")));
+                                });
+                                divider(ui);
+                                row(ui, t!("Server-Auslastung", "Server load"), t!("CPU, RAM und Festplatte in der Statusleiste (Linux)", "CPU, RAM and disk in the status bar (Linux)"), |ui| {
+                                    switch(ui, &mut p.server_stats);
+                                });
                             });
-                            ui.add_space(10.0);
-                            section(ui, t!("Verhalten", "Behavior"));
-                            ui.checkbox(&mut p.copy_on_select, t!("Markierten Text automatisch kopieren", "Copy selected text automatically"));
-                            ui.checkbox(&mut p.right_click_paste, t!("Rechtsklick fügt ein", "Right-click pastes"));
-                            ui.horizontal(|ui| {
-                                ui.label(t!("Verlauf (Zeilen)", "Scrollback (lines)"));
-                                ui.add(egui::DragValue::new(&mut p.scrollback).range(1_000..=1_000_000).speed(1000));
-                            });
-                            ui.checkbox(&mut p.server_stats, t!("CPU, RAM und Festplatte des Servers in der Statusleiste (Linux)", "Show server CPU, RAM and disk in the status bar (Linux)"));
                         }
                         SettingsPage::Connection => {
-                            section(ui, "SSH");
-                            ui.horizontal(|ui| {
-                                ui.label(t!("Keepalive alle", "Keepalive every"));
-                                ui.add(egui::DragValue::new(&mut p.keepalive).range(0..=600).suffix(" s"));
-                                ui.label(RichText::new(t!("(0 = aus)", "(0 = off)")).color(MUTED));
+                            group(ui, "SSH", |ui| {
+                                row(ui, "Keepalive", t!("Hält stille Verbindungen offen (0 = aus)", "Keeps idle connections open (0 = off)"), |ui| {
+                                    ui.add(egui::DragValue::new(&mut p.keepalive).range(0..=600).suffix(" s"));
+                                });
+                                divider(ui);
+                                row(
+                                    ui,
+                                    t!("Ältere Verfahren erlauben", "Allow older algorithms"),
+                                    t!("SHA1, CBC, 3DES für alte Switches und Router. Moderne Verfahren werden immer bevorzugt.", "SHA1, CBC, 3DES for old switches and routers. Modern algorithms are always preferred."),
+                                    |ui| {
+                                        switch(ui, &mut p.legacy_algorithms);
+                                    },
+                                );
+                                divider(ui);
+                                row(ui, t!("Standard-Benutzer", "Default user"), t!("Vorschlag für neue Verbindungen", "Suggested for new connections"), |ui| {
+                                    ui.add(TextEdit::singleline(&mut p.default_user).desired_width(170.0));
+                                });
+                                divider(ui);
+                                row(ui, t!("Vor dem Schließen fragen", "Ask before closing"), t!("Wenn noch Verbindungen aktiv sind", "When connections are still active"), |ui| {
+                                    switch(ui, &mut p.confirm_close);
+                                });
                             });
-                            ui.checkbox(&mut p.legacy_algorithms, t!("Ältere Verfahren erlauben (SHA1, CBC, 3DES) – für alte Switches/Router", "Allow older algorithms (SHA1, CBC, 3DES) – for old switches/routers"));
-                            hint(
-                                ui,
-                                t!(
-                                    "Moderne Verfahren werden immer bevorzugt. Abschalten erhöht die Sicherheit, kann aber alte Geräte aussperren.",
-                                    "Modern algorithms are always preferred. Turning this off increases security but can lock out old devices."
-                                ),
-                            );
-                            ui.add_space(8.0);
-                            ui.horizontal(|ui| {
-                                ui.label(t!("Standard-Benutzer", "Default user"));
-                                ui.add(TextEdit::singleline(&mut p.default_user).desired_width(160.0));
+                            group(ui, t!("X11-Weiterleitung", "X11 forwarding"), |ui| {
+                                let port = tf!("Port {} · braucht einen X-Server wie VcXsrv oder X410; pro Gerät unter Bearbeiten → Anmeldung einschalten", "Port {} · needs an X server like VcXsrv or X410; enable per device under Edit → Login", 6000 + p.x11_display);
+                                row(ui, t!("Lokales X-Display", "Local X display"), &port, |ui| {
+                                    ui.add(egui::DragValue::new(&mut p.x11_display).range(0..=63).prefix(":"));
+                                });
                             });
-                            ui.checkbox(&mut p.confirm_close, t!("Vor dem Schließen aktiver Verbindungen nachfragen", "Ask before closing active connections"));
-                            ui.add_space(10.0);
-                            section(ui, t!("X11-Weiterleitung", "X11 forwarding"));
-                            ui.horizontal(|ui| {
-                                ui.label(t!("Lokales X-Display", "Local X display"));
-                                ui.add(egui::DragValue::new(&mut p.x11_display).range(0..=63).prefix(":"));
-                                ui.label(RichText::new(tf!("(Port {})", "(port {})", 6000 + p.x11_display)).color(MUTED));
-                            });
-                            hint(
-                                ui,
-                                t!(
-                                    "Für grafische Linux-Programme wird ein X-Server auf diesem PC benötigt (z.B. VcXsrv mit „Disable access control“ oder X410). X11 wird pro Gerät unter Bearbeiten → Anmeldung eingeschaltet.",
-                                    "Graphical Linux programs need an X server on this PC (e.g. VcXsrv with \"Disable access control\" or X410). X11 is enabled per device under Edit → Login."
-                                ),
-                            );
-                            ui.add_space(10.0);
-                            section(ui, "SFTP");
-                            ui.horizontal(|ui| {
-                                ui.label(t!("Gleichzeitige Übertragungen", "Parallel transfers"));
-                                ui.add(egui::DragValue::new(&mut p.parallel_transfers).range(1..=8));
+                            group(ui, "SFTP", |ui| {
+                                row(ui, t!("Gleichzeitige Übertragungen", "Parallel transfers"), t!("Mehr ist schneller, belastet aber den Server", "More is faster but loads the server"), |ui| {
+                                    ui.add(egui::DragValue::new(&mut p.parallel_transfers).range(1..=8));
+                                });
                             });
                         }
                         SettingsPage::Security => {
-                            section(ui, t!("Server-Identität", "Server identity"));
-                            ui.checkbox(&mut p.verify_new_hosts, t!("Bei neuen Servern den Fingerprint bestätigen lassen", "Ask to confirm the fingerprint of new servers"));
-                            hint(ui, t!("Geänderte Host-Keys werden immer gemeldet (Schutz vor Man-in-the-Middle).", "Changed host keys are always reported (protection against man-in-the-middle)."));
-                            ui.add_space(6.0);
-                            egui::CollapsingHeader::new(tf!("Bekannte Server ({})", "Known servers ({})", ssh::known_hosts().len())).show(ui, |ui| {
-                                ScrollArea::vertical().max_height(120.0).show(ui, |ui| {
-                                    for (host, fp) in ssh::known_hosts() {
-                                        ui.horizontal(|ui| {
-                                            if ui.small_button("🗑").on_hover_text(t!("Vergessen", "Forget")).clicked() {
-                                                ssh::forget_host_key(&host);
-                                            }
-                                            ui.label(RichText::new(&host).monospace().size(12.0));
-                                            ui.label(RichText::new(&fp).monospace().size(10.5).color(MUTED));
-                                        });
-                                    }
-                                });
-                            });
-                            ui.add_space(8.0);
-                            section(ui, t!("Zwischenablage", "Clipboard"));
-                            ui.horizontal(|ui| {
-                                ui.label(t!("Kopierte Passwörter löschen nach", "Clear copied passwords after"));
-                                ui.add(egui::DragValue::new(&mut p.clipboard_clear).range(0..=600).suffix(" s"));
-                            });
-                            ui.add_space(8.0);
-                            section(ui, t!("App-Sperre", "App lock"));
-                            if p.lock_hash.is_some() {
-                                ui.label(RichText::new(t!("✔ NebulaSSH ist mit einem App-Passwort geschützt.", "✔ NebulaSSH is protected with an app password.")).color(GREEN));
-                                ui.horizontal(|ui| {
-                                    ui.label(t!("Automatisch sperren nach", "Lock automatically after"));
-                                    ui.add(egui::DragValue::new(&mut p.autolock_minutes).range(0..=240).suffix(" min"));
-                                    ui.label(RichText::new(t!("(0 = nie)", "(0 = never)")).color(MUTED));
-                                });
-                                if ui.button(t!("App-Passwort entfernen", "Remove app password")).clicked()
-                                    && confirm(t!("App-Sperre", "App lock"), t!("App-Passwort wirklich entfernen?", "Really remove the app password?"), MessageLevel::Warning)
-                                {
-                                    p.lock_hash = None;
-                                }
-                            } else {
-                                hint(ui, t!("Schützt den Start von NebulaSSH mit einem Passwort (z.B. auf geteilten PCs).", "Protects starting NebulaSSH with a password (e.g. on shared PCs)."));
-                                ui.horizontal(|ui| {
-                                    ui.add(TextEdit::singleline(lock1).password(true).hint_text(t!("Neues App-Passwort", "New app password")).desired_width(170.0));
-                                    ui.add(TextEdit::singleline(lock2).password(true).hint_text(t!("wiederholen", "repeat")).desired_width(170.0));
-                                    let ok = lock1.chars().count() >= 4 && lock1 == lock2;
-                                    if ui.add_enabled(ok, egui::Button::new(t!("Aktivieren", "Enable"))).clicked() {
-                                        match backup::hash_password(lock1) {
-                                            Ok(h) => {
-                                                p.lock_hash = Some(h);
-                                                lock1.clear();
-                                                lock2.clear();
-                                            }
-                                            Err(e) => alert(t!("App-Sperre", "App lock"), &e),
+                            group(ui, t!("Server-Identität", "Server identity"), |ui| {
+                                row(
+                                    ui,
+                                    t!("Neue Server bestätigen", "Confirm new servers"),
+                                    t!("Fingerprint beim ersten Verbinden anzeigen. Geänderte Host-Keys werden immer gemeldet.", "Show the fingerprint on first connect. Changed host keys are always reported."),
+                                    |ui| {
+                                        switch(ui, &mut p.verify_new_hosts);
+                                    },
+                                );
+                                divider(ui);
+                                let known = ssh::known_hosts();
+                                egui::CollapsingHeader::new(RichText::new(tf!("Bekannte Server ({})", "Known servers ({})", known.len())).color(Color32::from_gray(215))).show(ui, |ui| {
+                                    ScrollArea::vertical().max_height(140.0).show(ui, |ui| {
+                                        for (host, fp) in known {
+                                            ui.horizontal(|ui| {
+                                                if crate::sidebar::icon_button(ui, Icon::Trash, t!("Vergessen", "Forget")).clicked() {
+                                                    ssh::forget_host_key(&host);
+                                                }
+                                                ui.vertical(|ui| {
+                                                    ui.spacing_mut().item_spacing.y = 0.0;
+                                                    ui.label(RichText::new(&host).monospace().size(12.5).color(Color32::WHITE));
+                                                    ui.label(RichText::new(&fp).monospace().size(10.5).color(MUTED));
+                                                });
+                                            });
                                         }
-                                    }
+                                    });
                                 });
-                            }
+                            });
+                            group(ui, t!("Zwischenablage", "Clipboard"), |ui| {
+                                row(ui, t!("Kopierte Passwörter löschen", "Clear copied passwords"), t!("Nach dieser Zeit (0 = nie)", "After this time (0 = never)"), |ui| {
+                                    ui.add(egui::DragValue::new(&mut p.clipboard_clear).range(0..=600).suffix(" s"));
+                                });
+                            });
+                            group(ui, t!("App-Sperre", "App lock"), |ui| {
+                                if p.lock_hash.is_some() {
+                                    ui.add_space(8.0);
+                                    ui.horizontal(|ui| {
+                                        icons::show(ui, Icon::CheckCircle, 16.0, GREEN);
+                                        ui.label(RichText::new(t!("NebulaSSH ist mit einem App-Passwort geschützt.", "NebulaSSH is protected with an app password.")).color(GREEN));
+                                    });
+                                    ui.add_space(4.0);
+                                    divider(ui);
+                                    row(ui, t!("Automatisch sperren", "Lock automatically"), t!("Nach so vielen Minuten ohne Eingabe (0 = nie)", "After this many idle minutes (0 = never)"), |ui| {
+                                        ui.add(egui::DragValue::new(&mut p.autolock_minutes).range(0..=240).suffix(" min"));
+                                    });
+                                    divider(ui);
+                                    ui.add_space(6.0);
+                                    if icons::menu_colored(ui, Icon::Trash, t!("App-Passwort entfernen", "Remove app password"), RED).clicked()
+                                        && confirm(t!("App-Sperre", "App lock"), t!("App-Passwort wirklich entfernen?", "Really remove the app password?"), MessageLevel::Warning)
+                                    {
+                                        p.lock_hash = None;
+                                    }
+                                    ui.add_space(8.0);
+                                } else {
+                                    ui.add_space(8.0);
+                                    hint(ui, t!("Schützt den Start von NebulaSSH mit einem Passwort, z.B. auf geteilten PCs.", "Protects starting NebulaSSH with a password, e.g. on shared PCs."));
+                                    ui.add_space(4.0);
+                                    ui.horizontal(|ui| {
+                                        ui.add(TextEdit::singleline(lock1).password(true).hint_text(t!("Neues App-Passwort", "New app password")).desired_width(180.0));
+                                        ui.add(TextEdit::singleline(lock2).password(true).hint_text(t!("wiederholen", "repeat")).desired_width(150.0));
+                                        let ok = lock1.chars().count() >= 4 && lock1 == lock2;
+                                        let b = egui::Button::image_and_text(icons::image(ui.ctx(), Icon::Lock, 14.0, Color32::WHITE), RichText::new(t!("Aktivieren", "Enable")).color(Color32::WHITE)).fill(ACCENT);
+                                        if ui.add_enabled(ok, b).clicked() {
+                                            match backup::hash_password(lock1) {
+                                                Ok(h) => {
+                                                    p.lock_hash = Some(h);
+                                                    lock1.clear();
+                                                    lock2.clear();
+                                                }
+                                                Err(e) => alert(t!("App-Sperre", "App lock"), &e),
+                                            }
+                                        }
+                                    });
+                                    ui.add_space(10.0);
+                                }
+                            });
                         }
                         SettingsPage::Sessions => {
-                            section(ui, t!("Beim Start", "On start"));
-                            ui.checkbox(&mut p.restore_tabs, t!("Offene Verbindungen beim nächsten Start wiederherstellen", "Restore open connections on next start"));
-                            ui.checkbox(&mut p.splash, t!("Startbildschirm anzeigen", "Show splash screen"));
-                            ui.add_space(8.0);
-                            section(ui, t!("Protokollierung", "Logging"));
-                            ui.checkbox(&mut p.log_sessions, t!("Alle Sitzungen als Textdatei mitschreiben", "Write all sessions to text files"));
-                            ui.horizontal(|ui| {
+                            group(ui, t!("Beim Start", "On start"), |ui| {
+                                row(ui, t!("Tabs wiederherstellen", "Restore tabs"), t!("Offene Verbindungen beim nächsten Start wieder öffnen", "Reopen open connections on the next start"), |ui| {
+                                    switch(ui, &mut p.restore_tabs);
+                                });
+                                divider(ui);
+                                row(ui, t!("Startbildschirm", "Splash screen"), t!("Kurze Animation beim Öffnen", "Short animation when opening"), |ui| {
+                                    switch(ui, &mut p.splash);
+                                });
+                            });
+                            group(ui, t!("Protokollierung", "Logging"), |ui| {
+                                row(ui, t!("Sitzungen mitschreiben", "Log sessions"), t!("Jede neue Verbindung als Textdatei speichern", "Save every new connection as a text file"), |ui| {
+                                    switch(ui, &mut p.log_sessions);
+                                });
+                                divider(ui);
                                 let shown = if p.log_dir.is_empty() { nebula_core::storage::data_dir().join("logs").to_string_lossy().to_string() } else { p.log_dir.clone() };
+                                ui.add_space(8.0);
+                                ui.label(RichText::new(t!("Ordner", "Folder")).color(Color32::WHITE));
                                 ui.label(RichText::new(shown).monospace().size(11.5).color(MUTED));
-                            });
-                            ui.horizontal(|ui| {
-                                if ui.button(t!("Ordner wählen…", "Choose folder…")).clicked() {
-                                    if let Some(d) = rfd::FileDialog::new().pick_folder() {
-                                        p.log_dir = d.to_string_lossy().to_string();
+                                ui.add_space(4.0);
+                                ui.horizontal(|ui| {
+                                    if icons::menu(ui, Icon::Folder, t!("Ordner wählen…", "Choose folder…")).clicked() {
+                                        if let Some(d) = rfd::FileDialog::new().pick_folder() {
+                                            p.log_dir = d.to_string_lossy().to_string();
+                                        }
                                     }
-                                }
-                                if ui.button(t!("Ordner öffnen", "Open folder")).clicked() {
-                                    let dir = if p.log_dir.is_empty() { nebula_core::storage::data_dir().join("logs") } else { p.log_dir.clone().into() };
-                                    let _ = std::fs::create_dir_all(&dir);
-                                    let _ = std::process::Command::new("explorer").arg(dir).spawn();
-                                }
+                                    if icons::menu(ui, Icon::Window, t!("Ordner öffnen", "Open folder")).clicked() {
+                                        let dir = if p.log_dir.is_empty() { nebula_core::storage::data_dir().join("logs") } else { p.log_dir.clone().into() };
+                                        let _ = std::fs::create_dir_all(&dir);
+                                        let _ = std::process::Command::new("explorer").arg(dir).spawn();
+                                    }
+                                });
+                                ui.add_space(8.0);
+                                ui.horizontal(|ui| {
+                                    icons::show(ui, Icon::Warning, 14.0, AMBER);
+                                    ui.add(
+                                        egui::Label::new(
+                                            RichText::new(t!("Logs können Passwörter enthalten, die im Terminal eingegeben werden.", "Logs can contain passwords typed into the terminal.")).size(11.5).color(AMBER),
+                                        )
+                                        .wrap(),
+                                    );
+                                });
+                                ui.add_space(10.0);
                             });
-                            ui.label(
-                                RichText::new(t!(
-                                    "Gilt für neu geöffnete Verbindungen. Logs können Passwörter enthalten, die im Terminal eingegeben werden.",
-                                    "Applies to newly opened connections. Logs can contain passwords typed into the terminal."
-                                ))
-                                .size(11.5)
-                                .color(AMBER),
-                            );
                         }
                         SettingsPage::Backup => {
-                            section(ui, t!("Umzug auf einen neuen PC", "Moving to a new PC"));
-                            ui.label(
-                                RichText::new(t!(
-                                    "Ein Backup enthält Geräte, SSH-Keys, Snippets, Einstellungen und bekannte Server – verschlüsselt mit einem Passwort deiner Wahl.",
-                                    "A backup contains devices, SSH keys, snippets, settings and known servers – encrypted with a password of your choice."
-                                ))
-                                .color(MUTED),
-                            );
-                            ui.add_space(8.0);
-                            ui.horizontal(|ui| {
-                                if ui.add(egui::Button::new(RichText::new(t!("📦 Backup erstellen…", "📦 Create backup…")).color(Color32::WHITE)).fill(ACCENT)).clicked() {
-                                    self.pending_backup = Some(true);
-                                }
-                                if ui.button(t!("♻ Backup wiederherstellen…", "♻ Restore backup…")).clicked() {
-                                    self.pending_backup = Some(false);
-                                }
+                            group(ui, t!("Umzug auf einen neuen PC", "Moving to a new PC"), |ui| {
+                                ui.add_space(8.0);
+                                hint(
+                                    ui,
+                                    t!(
+                                        "Ein Backup enthält Geräte, SSH-Keys, Snippets, Einstellungen und bekannte Server – verschlüsselt mit einem Passwort deiner Wahl.",
+                                        "A backup contains devices, SSH keys, snippets, settings and known servers – encrypted with a password of your choice."
+                                    ),
+                                );
+                                ui.add_space(8.0);
+                                ui.horizontal(|ui| {
+                                    if icons::text_button(ui, Icon::Export, t!("Backup erstellen…", "Create backup…"), ACCENT, Color32::WHITE).clicked() {
+                                        self.pending_backup = Some(true);
+                                    }
+                                    if icons::text_button(ui, Icon::History, t!("Backup wiederherstellen…", "Restore backup…"), Color32::from_rgb(0x2e, 0x2e, 0x45), Color32::WHITE).clicked() {
+                                        self.pending_backup = Some(false);
+                                    }
+                                });
+                                ui.add_space(10.0);
                             });
-                            ui.add_space(12.0);
-                            section(ui, t!("Speicherort", "Storage location"));
-                            let dir = nebula_core::storage::data_dir();
-                            ui.label(RichText::new(dir.to_string_lossy()).monospace().size(12.0));
-                            if ui.button(t!("Datenordner öffnen", "Open data folder")).clicked() {
-                                let _ = std::process::Command::new("explorer").arg(&dir).spawn();
-                            }
-                            hint(
-                                ui,
-                                t!(
-                                    "hosts.json und keys.json sind mit AES-256 verschlüsselt; der Schlüssel liegt in der Windows-Anmeldeinformationsverwaltung dieses Benutzers.",
-                                    "hosts.json and keys.json are encrypted with AES-256; the key is stored in this user's Windows Credential Manager."
-                                ),
-                            );
+                            group(ui, t!("Speicherort", "Storage location"), |ui| {
+                                let dir = nebula_core::storage::data_dir();
+                                ui.add_space(8.0);
+                                ui.horizontal(|ui| {
+                                    icons::show(ui, Icon::Folder, 16.0, AMBER);
+                                    ui.add(egui::Label::new(RichText::new(dir.to_string_lossy()).monospace().size(12.0).color(Color32::WHITE)).truncate());
+                                });
+                                ui.add_space(6.0);
+                                if icons::menu(ui, Icon::Window, t!("Datenordner öffnen", "Open data folder")).clicked() {
+                                    let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+                                }
+                                ui.add_space(6.0);
+                                ui.horizontal(|ui| {
+                                    icons::show(ui, Icon::Shield, 14.0, GREEN);
+                                    ui.add(
+                                        egui::Label::new(
+                                            RichText::new(t!(
+                                                "Geräte und Keys sind mit AES-256 verschlüsselt; der Schlüssel liegt in der Windows-Anmeldeinformationsverwaltung.",
+                                                "Devices and keys are encrypted with AES-256; the key is kept in the Windows Credential Manager."
+                                            ))
+                                            .size(11.5)
+                                            .color(MUTED),
+                                        )
+                                        .wrap(),
+                                    );
+                                });
+                                ui.add_space(10.0);
+                            });
                         }
                         SettingsPage::About => {
-                            ui.vertical_centered(|ui| {
-                                ui.add_space(10.0);
-                                ui.add(egui::Image::new(&self.logo).fit_to_exact_size(vec2(96.0, 96.0)));
-                                ui.add_space(8.0);
-                                ui.label(RichText::new("NebulaSSH").size(24.0).family(egui::FontFamily::Name("ui-bold".into())).color(Color32::WHITE));
-                                ui.label(RichText::new(format!("Version {VERSION}")).color(MUTED));
-                                ui.add_space(8.0);
-                                ui.label(t!("SSH-, SFTP-, Telnet- und Serial-Client für Windows", "SSH, SFTP, Telnet and serial client for Windows"));
-                                ui.label(RichText::new("by Thomas Schöpf").color(LAVENDER));
-                                ui.add_space(14.0);
-                                ui.label(RichText::new(t!("Gebaut mit Rust · egui · russh · alacritty_terminal", "Built with Rust · egui · russh · alacritty_terminal")).size(12.0).color(MUTED));
+                            egui::Frame::new().fill(Color32::from_rgb(0x1c, 0x16, 0x33)).stroke(Stroke::new(1.0, Color32::from_rgb(0x33, 0x27, 0x5e))).corner_radius(12).inner_margin(18).show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                ui.horizontal(|ui| {
+                                    ui.add(egui::Image::new(&self.logo).fit_to_exact_size(vec2(72.0, 72.0)));
+                                    ui.add_space(8.0);
+                                    ui.vertical(|ui| {
+                                        ui.spacing_mut().item_spacing.y = 2.0;
+                                        ui.horizontal(|ui| {
+                                            ui.spacing_mut().item_spacing.x = 0.0;
+                                            ui.label(RichText::new("Nebula").size(24.0).family(egui::FontFamily::Name("ui-bold".into())).color(Color32::WHITE));
+                                            ui.label(RichText::new("SSH").size(24.0).family(egui::FontFamily::Name("ui-bold".into())).color(LAVENDER));
+                                        });
+                                        ui.label(RichText::new(tf!("Version {VERSION}", "Version {VERSION}")).color(Color32::from_gray(210)));
+                                        ui.label(RichText::new(t!("SSH-, SFTP-, Telnet- und Serial-Client für Windows", "SSH, SFTP, Telnet and serial client for Windows")).size(12.5).color(MUTED));
+                                        ui.label(RichText::new("by Thomas Schöpf").size(12.5).color(LAVENDER));
+                                    });
+                                });
                             });
+                            ui.add_space(14.0);
                             self.update_settings(ui, p);
+                            ui.add_space(10.0);
+                            ui.label(RichText::new(t!("Gebaut mit Rust, egui, russh und alacritty_terminal", "Built with Rust, egui, russh and alacritty_terminal")).size(11.5).color(Color32::from_gray(110)));
                         }
                     }
                 });
             });
         });
-        ui.add_space(12.0);
-        let res = buttons(ui, t!("Übernehmen", "Apply"), true);
+        ui.add_space(14.0);
+        ui.painter().hline(ui.max_rect().x_range(), ui.cursor().top() - 7.0, Stroke::new(1.0, LINE));
+        let mut res = None;
+        ui.horizontal(|ui| {
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if ui.add(egui::Button::new(RichText::new(t!("Übernehmen", "Apply")).strong().color(Color32::WHITE)).fill(ACCENT).min_size(vec2(130.0, 34.0))).clicked() {
+                    res = Some(true);
+                }
+                if ui.add(egui::Button::new(RichText::new(t!("Abbrechen", "Cancel")).strong()).min_size(vec2(110.0, 34.0))).clicked() {
+                    res = Some(false);
+                }
+            });
+        });
+        if ui.input(|i| i.key_pressed(Key::Escape)) {
+            res = Some(false);
+        }
         match res {
             Some(true) => {
                 let changed_term = p.scrollback != self.prefs.scrollback || p.cursor != self.prefs.cursor;
@@ -1363,4 +1595,71 @@ impl App {
         }
         keep
     }
+}
+
+/// Einstellungs-Gruppe: Überschrift und Karte.
+pub fn group(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
+    ui.label(RichText::new(title).size(12.5).strong().color(Color32::from_gray(170)));
+    ui.add_space(4.0);
+    egui::Frame::new()
+        .fill(Color32::from_rgb(0x1f, 0x1f, 0x2e))
+        .stroke(Stroke::new(1.0, Color32::from_rgb(0x2a, 0x2a, 0x3d)))
+        .corner_radius(10)
+        .inner_margin(egui::Margin::symmetric(16, 2))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.spacing_mut().item_spacing.y = 0.0;
+            add(ui);
+        });
+    ui.add_space(16.0);
+}
+
+/// Eine Einstellung: Titel und Beschreibung links, Bedienelement rechts.
+pub fn row(ui: &mut Ui, title: &str, desc: &str, control: impl FnOnce(&mut Ui)) {
+    let w = ui.available_width();
+    ui.horizontal(|ui| {
+        ui.set_min_height(54.0);
+        let left = (w * 0.52).max(200.0);
+        ui.allocate_ui_with_layout(vec2(left, 54.0), Layout::top_down(Align::Min), |ui| {
+            ui.add_space(9.0);
+            ui.spacing_mut().item_spacing.y = 2.0;
+            ui.label(RichText::new(title).size(13.5).color(Color32::WHITE));
+            if !desc.is_empty() {
+                ui.add(egui::Label::new(RichText::new(desc).size(11.5).color(MUTED)).wrap());
+            }
+            ui.add_space(9.0);
+        });
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.y = 6.0;
+            control(ui);
+        });
+    });
+}
+
+pub fn divider(ui: &mut Ui) {
+    let y = ui.cursor().top();
+    ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1.0, Color32::from_rgb(0x2a, 0x2a, 0x3d)));
+    ui.add_space(1.0);
+}
+
+/// Schiebeschalter (an/aus) mit kurzer Animation.
+pub fn switch(ui: &mut Ui, on: &mut bool) -> egui::Response {
+    let size = vec2(40.0, 22.0);
+    let (rect, mut resp) = ui.allocate_exact_size(size, egui::Sense::click());
+    if resp.clicked() {
+        *on = !*on;
+        resp.mark_changed();
+    }
+    let t = ui.ctx().animate_bool_with_time(resp.id, *on, 0.12);
+    let off = Color32::from_rgb(0x34, 0x33, 0x4a);
+    let bg = egui::lerp(egui::Rgba::from(off)..=egui::Rgba::from(ACCENT_HI), t);
+    let r = rect.height() / 2.0;
+    ui.painter().rect_filled(rect, r, Color32::from(bg));
+    if resp.hovered() {
+        ui.painter().rect_stroke(rect, r, Stroke::new(1.0, Color32::from_rgb(0x8a, 0x6a, 0xff)), egui::StrokeKind::Outside);
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    let x = egui::lerp(rect.left() + r..=rect.right() - r, t);
+    ui.painter().circle_filled(egui::pos2(x, rect.center().y), r - 3.5, Color32::WHITE);
+    resp
 }

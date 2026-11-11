@@ -51,14 +51,6 @@ pub fn primary(ui: &mut Ui, text: &str, width: f32) -> egui::Response {
     ui.add(egui::Button::new(RichText::new(text).strong().color(Color32::WHITE)).fill(ACCENT).min_size(vec2(width, 34.0)))
 }
 
-/// Dezenter Symbolknopf ohne Hintergrund (Hintergrund erst beim Überfahren).
-pub fn ghost_button(ui: &mut Ui, icon: &str, tip: &str) -> egui::Response {
-    ui.add_sized(
-        vec2(30.0, 30.0),
-        egui::Button::new(RichText::new(icon).size(15.0).color(Color32::from_gray(200))).frame_when_inactive(false),
-    )
-    .on_hover_text(tip)
-}
 
 /// Karte mit abgerundeten Ecken für Bereiche in der Seitenleiste.
 pub fn card<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
@@ -77,24 +69,35 @@ pub fn card<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
 /// Quadratische Kachel mit Symbol (Gerätetyp), optional mit Statuspunkt.
 pub fn tile(ui: &mut Ui, h: &Host, size: f32, dot: Option<Color32>) {
     let (rect, _) = ui.allocate_exact_size(vec2(size, size), egui::Sense::hover());
-    let bg = match h.kind.as_str() {
-        "serial" => Color32::from_rgb(0x3a, 0x2a, 0x12),
-        "telnet" => Color32::from_rgb(0x12, 0x2e, 0x3a),
-        _ => Color32::from_rgb(0x2a, 0x1b, 0x52),
-    };
-    let (glyph, font, fg) = kind_glyph(h, size * 0.42);
-    let p = ui.painter();
-    p.rect_filled(rect, size * 0.26, bg);
-    p.text(rect.center(), egui::Align2::CENTER_CENTER, glyph, font, fg);
+    let (icon, fg) = kind_icon(h);
+    let r = size * 0.28;
+    ui.painter().rect_filled(rect, r, fg.gamma_multiply(0.13));
+    ui.painter().rect_stroke(rect, r, Stroke::new(1.0, fg.gamma_multiply(0.22)), egui::StrokeKind::Inside);
+    icons::paint(ui, egui::Rect::from_center_size(rect.center(), vec2(size * 0.52, size * 0.52)), icon, fg);
     if let Some(c) = dot {
-        let c0 = rect.right_bottom() - vec2(3.0, 3.0);
-        p.circle_filled(c0, 5.0, PANEL2);
-        p.circle_filled(c0, 3.5, c);
+        let c0 = rect.right_bottom() - vec2(2.0, 2.0);
+        ui.painter().circle_filled(c0, 5.5, PANEL);
+        ui.painter().circle_filled(c0, 3.8, c);
     }
 }
 
-pub fn icon_button(ui: &mut Ui, icon: &str, tip: &str) -> egui::Response {
-    ui.add_sized(vec2(32.0, 28.0), egui::Button::new(RichText::new(icon).size(15.0))).on_hover_text(tip)
+/// Symbolknopf mit Rahmen (neben Eingabefeldern).
+pub fn icon_button(ui: &mut Ui, icon: Icon, tip: &str) -> egui::Response {
+    // Feste Größe (32×28) – ein egui-Button mit Bild wäre durch den Innenabstand breiter
+    let sense = if ui.is_enabled() { egui::Sense::click() } else { egui::Sense::hover() };
+    let (rect, resp) = ui.allocate_exact_size(vec2(32.0, 28.0), sense);
+    let v = ui.style().interact(&resp);
+    ui.painter().rect(rect, v.corner_radius, v.weak_bg_fill, v.bg_stroke, egui::StrokeKind::Inside);
+    let col = if ui.is_enabled() { Color32::from_gray(225) } else { Color32::from_gray(110) };
+    icons::paint(ui, egui::Rect::from_center_size(rect.center(), vec2(15.0, 15.0)), icon, col);
+    if tip.is_empty() { resp } else { resp.on_hover_text(tip) }
+}
+
+/// Kleines Icon in einem farbig hinterlegten Quadrat.
+pub fn badge_icon(ui: &mut Ui, icon: Icon, size: f32, color: Color32) {
+    let (rect, _) = ui.allocate_exact_size(vec2(size, size), egui::Sense::hover());
+    ui.painter().rect_filled(rect, size * 0.3, color.gamma_multiply(0.16));
+    icons::paint(ui, egui::Rect::from_center_size(rect.center(), vec2(size * 0.58, size * 0.58)), icon, color);
 }
 
 /// Breite für ein dehnbares Feld, wenn danach noch `buttons` Symbolknöpfe folgen.
@@ -103,13 +106,26 @@ pub fn fill_width(ui: &Ui, buttons: usize) -> f32 {
 }
 
 /// Kleiner farbiger Chip (z.B. in der Statusleiste)
-pub fn chip(ui: &mut Ui, text: &str, color: Color32) -> egui::Response {
+pub fn chip(ui: &mut Ui, icon: Option<Icon>, text: &str, color: Color32) -> egui::Response {
     egui::Frame::new()
         .fill(color.gamma_multiply(0.14))
         .corner_radius(12)
         .inner_margin(Margin::symmetric(9, 3))
         .show(ui, |ui| {
-            ui.label(RichText::new(text).size(12.0).color(color));
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 5.0;
+                // In rechtsbündigen Leisten läuft die Reihenfolge rückwärts – Icon soll trotzdem links stehen
+                let rtl = ui.layout().prefer_right_to_left();
+                if rtl {
+                    ui.label(RichText::new(text).size(12.0).color(color));
+                }
+                if let Some(i) = icon {
+                    icons::show(ui, i, 13.0, color);
+                }
+                if !rtl {
+                    ui.label(RichText::new(text).size(12.0).color(color));
+                }
+            });
         })
         .response
         .interact(egui::Sense::click())
@@ -139,9 +155,9 @@ pub const AUTH_IDS: [&str; 3] = ["password", "key", "agent"];
 
 impl App {
     pub fn sidebar(&mut self, ui: &mut Ui) {
-        ui.add_space(14.0);
+        ui.add_space(16.0);
         ui.horizontal(|ui| {
-            ui.add(egui::Image::new(&self.logo).fit_to_exact_size(vec2(32.0, 32.0)));
+            ui.add(egui::Image::new(&self.logo).fit_to_exact_size(vec2(34.0, 34.0)));
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 ui.horizontal(|ui| {
@@ -152,22 +168,49 @@ impl App {
                 ui.label(RichText::new(format!("Version {VERSION}")).size(10.5).color(MUTED));
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                if ghost_button(ui, "⚙", t!("Einstellungen", "Settings")).clicked() {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                if icons::button(ui, Icon::Settings, t!("Einstellungen", "Settings")).clicked() {
                     self.open_settings(SettingsPage::Terminal);
                 }
-                if ghost_button(ui, "🔑", t!("SSH-Keys verwalten / erzeugen", "Manage / create SSH keys")).clicked() {
-                    self.open_keys();
-                }
-                if ghost_button(ui, "📥", t!("Verbindungen importieren (PuTTY, MobaXterm, ssh_config)", "Import connections (PuTTY, MobaXterm, ssh_config)")).clicked() {
-                    self.open_import();
-                }
-                if self.prefs.lock_hash.is_some() && ghost_button(ui, "🔒", t!("Jetzt sperren", "Lock now")).clicked() {
+                if self.prefs.lock_hash.is_some() && icons::button(ui, Icon::Lock, t!("Jetzt sperren", "Lock now")).clicked() {
                     self.lock_now();
                 }
             });
         });
-        ui.add_space(14.0);
+        ui.add_space(12.0);
+        // Werkzeugleiste: Import, Keys, Snippets
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            let w = (ui.available_width() - 12.0) / 3.0;
+            let tool = |ui: &mut Ui, icon: Icon, text: &str, tip: &str, color: Color32| {
+                let (rect, resp) = ui.allocate_exact_size(vec2(w, 54.0), egui::Sense::click());
+                let hov = resp.hovered();
+                ui.painter().rect_filled(rect, 10.0, if hov { icons::HOVER_BG } else { Color32::from_rgb(0x1b, 0x1b, 0x29) });
+                ui.painter().rect_stroke(rect, 10.0, Stroke::new(1.0, if hov { color.gamma_multiply(0.55) } else { Color32::from_rgb(0x29, 0x29, 0x3b) }), egui::StrokeKind::Inside);
+                icons::paint(ui, egui::Rect::from_center_size(rect.center_top() + vec2(0.0, 19.0), vec2(18.0, 18.0)), icon, color);
+                ui.painter().text(
+                    rect.center_top() + vec2(0.0, 40.0),
+                    egui::Align2::CENTER_CENTER,
+                    text,
+                    egui::FontId::proportional(11.5),
+                    if hov { Color32::WHITE } else { Color32::from_gray(190) },
+                );
+                if hov {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                }
+                resp.on_hover_text(tip).clicked()
+            };
+            if tool(ui, Icon::Import, t!("Import", "Import"), t!("Verbindungen importieren (PuTTY, MobaXterm, ssh_config)", "Import connections (PuTTY, MobaXterm, ssh_config)"), CYAN) {
+                self.open_import();
+            }
+            if tool(ui, Icon::Key, t!("SSH-Keys", "SSH keys"), t!("SSH-Keys verwalten / erzeugen", "Manage / create SSH keys"), LAVENDER) {
+                self.open_keys();
+            }
+            if tool(ui, Icon::Bolt, "Snippets", t!("Befehlsbibliothek (Strg+Umschalt+P)", "Command library (Ctrl+Shift+P)"), AMBER) {
+                self.open_snippets();
+            }
+        });
+        ui.add_space(12.0);
 
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             let open_id = egui::Id::new("quick_open");
@@ -175,10 +218,10 @@ impl App {
             card(ui, |ui| {
                 let rect = ui
                     .horizontal(|ui| {
-                        ui.label(RichText::new("⚡").color(AMBER));
+                        badge_icon(ui, Icon::Plus, 24.0, LAVENDER);
                         ui.label(RichText::new(t!("Neue Verbindung", "New connection")).strong().color(Color32::WHITE));
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            ui.label(RichText::new(if open { "▾" } else { "▸" }).color(MUTED));
+                            icons::show(ui, if open { Icon::ChevronDown } else { Icon::ChevronRight }, 15.0, MUTED);
                         });
                     })
                     .response
@@ -242,7 +285,7 @@ impl App {
                                 ui.selectable_value(&mut self.form.key_name, k.name.clone(), &k.name);
                             }
                         });
-                        if icon_button(ui, "🔑", t!("SSH-Keys verwalten / erzeugen", "Manage / create SSH keys")).clicked() {
+                        if icon_button(ui, Icon::Key, t!("SSH-Keys verwalten / erzeugen", "Manage / create SSH keys")).clicked() {
                             self.open_keys();
                         }
                     });
@@ -264,7 +307,7 @@ impl App {
                             connect_now = true;
                         }
                         if ui
-                            .add_enabled_ui(!self.form.pass.is_empty(), |ui| ui.add_sized(vec2(32.0, 28.0), egui::Button::new("📋")))
+                            .add_enabled_ui(!self.form.pass.is_empty(), |ui| icon_button(ui, Icon::Copy, ""))
                             .inner
                             .on_hover_text(tf!(
                                 "Passwort kopieren (wird nach {} s aus der Zwischenablage gelöscht)",
@@ -290,7 +333,7 @@ impl App {
                         ui.selectable_value(&mut self.form.port, p.clone(), p);
                     }
                 });
-                if icon_button(ui, "⟳", t!("Ports aktualisieren", "Refresh ports")).clicked() {
+                if icon_button(ui, Icon::Refresh, t!("Ports aktualisieren", "Refresh ports")).clicked() {
                     self.refresh_ports();
                 }
             });
@@ -310,10 +353,10 @@ impl App {
                         self.form.baud = b.rate;
                     }
                 }
-                if icon_button(ui, "+", t!("Eigenes Baudrate-Profil", "Custom baud rate profile")).clicked() {
+                if icon_button(ui, Icon::Plus, t!("Eigenes Baudrate-Profil", "Custom baud rate profile")).clicked() {
                     self.dialog = Some(Dialog::AddBaud { name: String::new(), rate: String::new() });
                 }
-                if custom && icon_button(ui, "🗑", t!("Eigenes Profil löschen", "Delete custom profile")).clicked() {
+                if custom && icon_button(ui, Icon::Trash, t!("Eigenes Profil löschen", "Delete custom profile")).clicked() {
                     let label = self.baud_label.clone();
                     self.bauds.retain(|b| b.label != label);
                     self.baud_label = "115200".into();
@@ -323,7 +366,10 @@ impl App {
             });
             ui.add_space(10.0);
         } else {
-            ui.label(RichText::new(t!("Telnet ist unverschlüsselt – nur für alte Geräte im eigenen Netz verwenden.", "Telnet is unencrypted – only use it for old devices in your own network.")).size(11.5).color(AMBER));
+            ui.horizontal(|ui| {
+                icons::show(ui, Icon::Warning, 14.0, AMBER);
+                ui.add(egui::Label::new(RichText::new(t!("Telnet ist unverschlüsselt – nur für alte Geräte im eigenen Netz verwenden.", "Telnet is unencrypted – only use it for old devices in your own network.")).size(11.5).color(AMBER)).wrap());
+            });
             ui.add_space(8.0);
         }
 
@@ -417,19 +463,17 @@ impl App {
 
     fn device_list(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            ui.label(RichText::new(t!("Geräte", "Devices")).strong().color(Color32::WHITE));
-            ui.label(RichText::new(self.hosts.len().to_string()).size(11.5).color(MUTED));
+            ui.label(RichText::new(t!("Geräte", "Devices")).size(15.0).family(egui::FontFamily::Name("ui-bold".into())).color(Color32::WHITE));
+            egui::Frame::new().fill(FIELD).corner_radius(8).inner_margin(Margin::symmetric(7, 1)).show(ui, |ui| {
+                ui.label(RichText::new(self.hosts.len().to_string()).size(11.0).color(MUTED));
+            });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ghost_button(ui, "+", t!("Neues Gerät anlegen", "Add device")).clicked() {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                if icons::button(ui, Icon::Plus, t!("Neues Gerät anlegen", "Add device")).clicked() {
                     self.new_host_dialog();
                 }
                 let reach_on = self.prefs.check_reachability;
-                let icon = RichText::new("📶").size(14.0).color(if reach_on { GREEN } else { Color32::from_gray(140) });
-                if ui
-                    .add_sized(vec2(30.0, 30.0), egui::Button::new(icon).frame_when_inactive(false))
-                    .on_hover_text(t!("Erreichbarkeit regelmäßig prüfen (Ping + Port)", "Check reachability regularly (ping + port)"))
-                    .clicked()
-                {
+                if icons::toggle(ui, Icon::Activity, t!("Erreichbarkeit regelmäßig prüfen (Ping + Port)", "Check reachability regularly (ping + port)"), reach_on, GREEN).clicked() {
                     self.prefs.check_reachability = !reach_on;
                     if !reach_on {
                         let hosts: Vec<Host> = self.hosts.iter().filter(|h| h.is_network()).cloned().collect();
@@ -443,20 +487,47 @@ impl App {
                 }
             });
         });
+        ui.add_space(4.0);
         if self.hosts.len() > 3 {
-            ui.add(TextEdit::singleline(&mut self.device_search).hint_text(t!("🔍  Suchen…", "🔍  Search…")).desired_width(f32::INFINITY));
-            ui.add_space(8.0);
+            let focused = ui.memory(|m| m.has_focus(egui::Id::new("device_search")));
+            egui::Frame::new()
+                .fill(FIELD)
+                .stroke(Stroke::new(1.0, if focused { ACCENT_HI } else { Color32::from_rgb(0x2e, 0x2e, 0x42) }))
+                .corner_radius(9)
+                .inner_margin(Margin { left: 9, right: 6, top: 3, bottom: 3 })
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        icons::show(ui, Icon::Search, 14.0, MUTED);
+                        ui.add(
+                            TextEdit::singleline(&mut self.device_search)
+                                .id(egui::Id::new("device_search"))
+                                .frame(egui::Frame::NONE)
+                                .hint_text(t!("Geräte durchsuchen", "Search devices"))
+                                .desired_width(f32::INFINITY),
+                        );
+                    });
+                });
+            ui.add_space(10.0);
         }
         if self.hosts.is_empty() {
-            ui.add_space(4.0);
-            ui.label(
-                RichText::new(t!(
-                    "Noch keine Geräte gespeichert.\nVerbindung eingeben und „Speichern“ klicken – oder oben 📥 vorhandene Sitzungen aus PuTTY, MobaXterm oder ~/.ssh/config importieren.",
-                    "No devices saved yet.\nEnter a connection and click \"Save\" – or import existing sessions from PuTTY, MobaXterm or ~/.ssh/config via 📥 above."
-                ))
-                .italics()
-                .color(Color32::from_gray(115)),
-            );
+            ui.add_space(10.0);
+            ui.vertical_centered(|ui| {
+                badge_icon(ui, Icon::Server, 44.0, MUTED);
+                ui.add_space(8.0);
+                ui.label(RichText::new(t!("Noch keine Geräte", "No devices yet")).strong().color(Color32::from_gray(210)));
+                ui.label(
+                    RichText::new(t!(
+                        "Verbindung oben eingeben und „Speichern“ klicken – oder vorhandene Sitzungen übernehmen.",
+                        "Enter a connection above and click \"Save\" – or bring over existing sessions."
+                    ))
+                    .size(12.0)
+                    .color(MUTED),
+                );
+                ui.add_space(8.0);
+                if icons::text_button(ui, Icon::Import, t!("Aus PuTTY & Co. importieren", "Import from PuTTY & co."), FIELD, Color32::WHITE).clicked() {
+                    self.open_import();
+                }
+            });
             return;
         }
 
@@ -477,7 +548,7 @@ impl App {
         let mut action = None;
         let favs: Vec<usize> = (0..self.hosts.len()).filter(|&i| self.hosts[i].favorite && matches(&self.hosts[i])).collect();
         if !favs.is_empty() {
-            group_header(ui, t!("★  Favoriten", "★  Favorites"), favs.len(), AMBER);
+            group_header(ui, Icon::StarFill, t!("Favoriten", "Favorites"), favs.len(), AMBER);
             for i in favs {
                 if let Some(a) = self.device_row(ui, i) {
                     action = Some(a);
@@ -506,8 +577,8 @@ impl App {
                 let title = if g.is_empty() { t!("Ohne Gruppe", "No group").to_string() } else { g.clone() };
                 let id = egui::Id::new(("grp", &g));
                 let mut open = ui.ctx().data_mut(|d| *d.get_temp_mut_or(id, true));
-                let arrow = if open { "▾" } else { "▸" };
-                if group_header(ui, &format!("{arrow}  {title}"), idx.len(), Color32::from_gray(170)).clicked() {
+                let arrow = if open { Icon::ChevronDown } else { Icon::ChevronRight };
+                if group_header(ui, arrow, &title, idx.len(), Color32::from_gray(175)).clicked() {
                     open = !open;
                     ui.ctx().data_mut(|d| d.insert_temp(id, open));
                 }
@@ -591,44 +662,69 @@ impl App {
         } else {
             None
         };
-        let frame = egui::Frame::new().fill(PANEL2).corner_radius(9).inner_margin(Margin { left: 8, right: 6, top: 7, bottom: 7 });
+        let hover_id = egui::Id::new(("dev_hover", i));
+        let was_hovered = ui.ctx().data(|d| d.get_temp::<bool>(hover_id)).unwrap_or(false);
+        let fill = if was_hovered {
+            Color32::from_rgb(0x24, 0x23, 0x37)
+        } else if connected {
+            Color32::from_rgb(0x1d, 0x1c, 0x30)
+        } else {
+            Color32::TRANSPARENT
+        };
+        let frame = egui::Frame::new().fill(fill).corner_radius(10).inner_margin(Margin { left: 7, right: 6, top: 6, bottom: 6 });
         let resp = frame
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    tile(ui, h, 34.0, dot);
+                    tile(ui, h, 36.0, dot);
                     ui.add_space(4.0);
+                    // Rechts: Merkmale und Stern; der Name bekommt den Rest
+                    let mut marks: Vec<(Icon, &str)> = vec![];
+                    if h.is_ssh() {
+                        match h.auth_method.as_str() {
+                            "key" => marks.push((Icon::Key, t!("Anmeldung per SSH-Key", "Login with SSH key"))),
+                            "agent" => marks.push((Icon::Agent, t!("Anmeldung über SSH-Agent", "Login via SSH agent"))),
+                            _ => {}
+                        }
+                        if !h.jump.is_empty() {
+                            marks.push((Icon::Jump, t!("Über Jump-Host", "Via jump host")));
+                        }
+                        if h.forwards.iter().any(|f| f.enabled) {
+                            marks.push((Icon::Tunnel, t!("Mit Tunneln", "With tunnels")));
+                        }
+                    }
+                    let show_star = h.favorite || was_hovered;
+                    let right = marks.len() as f32 * 17.0 + if show_star { 26.0 } else { 0.0 };
                     ui.vertical(|ui| {
+                        ui.set_width((ui.available_width() - right - 4.0).max(40.0));
                         ui.spacing_mut().item_spacing.y = 1.0;
                         ui.add(egui::Label::new(RichText::new(h.display_name()).strong().color(Color32::WHITE)).truncate());
-                        let mut sub = h.subtitle();
-                        if h.is_ssh() {
-                            match h.auth_method.as_str() {
-                                "key" => sub.push_str("  🔑"),
-                                "agent" => sub.push_str("  🗝"),
-                                _ => {}
-                            }
-                            if !h.jump.is_empty() {
-                                sub.push_str("  ↪");
-                            }
-                            if h.forwards.iter().any(|f| f.enabled) {
-                                sub.push_str("  ⇄");
-                            }
-                        }
-                        ui.add(egui::Label::new(RichText::new(sub).size(11.5).color(MUTED)).truncate());
+                        ui.add(egui::Label::new(RichText::new(h.subtitle()).size(11.5).color(MUTED)).truncate());
                     });
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let star = if h.favorite { RichText::new("★").color(AMBER) } else { RichText::new("☆").color(Color32::from_gray(90)) };
-                        if ui.add(egui::Button::new(star.size(15.0)).frame(false)).on_hover_text(t!("Favorit", "Favorite")).clicked() {
-                            act = Some(DeviceAction::Favorite(i));
+                        ui.spacing_mut().item_spacing.x = 3.0;
+                        if show_star {
+                            let (icon, col) = if h.favorite { (Icon::StarFill, AMBER) } else { (Icon::Star, Color32::from_gray(120)) };
+                            let (r, sr) = ui.allocate_exact_size(vec2(24.0, 24.0), egui::Sense::click());
+                            icons::paint(ui, egui::Rect::from_center_size(r.center(), vec2(15.0, 15.0)), icon, if sr.hovered() { AMBER } else { col });
+                            if sr.on_hover_text(t!("Favorit", "Favorite")).clicked() {
+                                act = Some(DeviceAction::Favorite(i));
+                            }
+                        }
+                        for (icon, tip) in marks {
+                            icons::show(ui, icon, 14.0, Color32::from_gray(125)).on_hover_text(tip);
                         }
                     });
                 });
             })
             .response
             .interact(egui::Sense::click());
+        let now_hovered = ui.rect_contains_pointer(resp.rect);
+        ui.ctx().data_mut(|d| d.insert_temp(hover_id, now_hovered));
+        if was_hovered != now_hovered {
+            ui.ctx().request_repaint();
+        }
         if resp.hovered() {
-            ui.painter().rect_stroke(resp.rect, 9.0, Stroke::new(1.0, ACCENT_HI), egui::StrokeKind::Inside);
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }
         let resp = resp.on_hover_ui(|ui| {
@@ -641,7 +737,7 @@ impl App {
                 ui.label(tf!("Über Jump-Host: {}", "Via jump host: {}", h.jump));
             }
             for f in h.forwards.iter().filter(|f| f.enabled) {
-                ui.label(format!("⇄ {}", f.label()));
+                ui.label(tf!("Tunnel {}", "Tunnel {}", f.label()));
             }
             if let Some(r) = reach {
                 ui.label(r.summary());
@@ -658,31 +754,31 @@ impl App {
             act = Some(DeviceAction::Connect(i));
         }
         resp.context_menu(|ui| {
-            if ui.button(t!("▶  Verbinden", "▶  Connect")).clicked() {
+            if icons::menu(ui, Icon::Play, t!("Verbinden", "Connect")).clicked() {
                 act = Some(DeviceAction::Connect(i));
             }
-            if ui.button(t!("✎  Bearbeiten…", "✎  Edit…")).clicked() {
+            if icons::menu(ui, Icon::Pencil, t!("Bearbeiten…", "Edit…")).clicked() {
                 act = Some(DeviceAction::Edit(i));
             }
-            if h.is_ssh() && ui.button(t!("⇄  Tunnel…", "⇄  Tunnels…")).clicked() {
+            if h.is_ssh() && icons::menu(ui, Icon::Tunnel, t!("Tunnel…", "Tunnels…")).clicked() {
                 act = Some(DeviceAction::Tunnels(i));
             }
-            if ui.button(t!("⤵  In Formular laden", "⤵  Load into form")).clicked() {
+            if icons::menu(ui, Icon::Import, t!("In Formular laden", "Load into form")).clicked() {
                 act = Some(DeviceAction::Load(i));
             }
-            if ui.button(t!("⧉  Duplizieren", "⧉  Duplicate")).clicked() {
+            if icons::menu(ui, Icon::Copy, t!("Duplizieren", "Duplicate")).clicked() {
                 act = Some(DeviceAction::Duplicate(i));
             }
-            if ui.button(if h.favorite { t!("☆  Kein Favorit mehr", "☆  Remove favorite") } else { t!("★  Als Favorit", "★  Add to favorites") }).clicked() {
+            if icons::menu(ui, if h.favorite { Icon::Star } else { Icon::StarFill }, if h.favorite { t!("Kein Favorit mehr", "Remove favorite") } else { t!("Als Favorit", "Add to favorites") }).clicked() {
                 act = Some(DeviceAction::Favorite(i));
             }
             if h.is_network() {
                 ui.separator();
-                if ui.button(t!("📶  Ping / Port prüfen", "📶  Ping / check port")).clicked() {
+                if icons::menu(ui, Icon::Activity, t!("Ping / Port prüfen", "Ping / check port")).clicked() {
                     act = Some(DeviceAction::Check(i));
                 }
                 if ui
-                    .add_enabled(!h.mac.trim().is_empty(), egui::Button::new(t!("⏻  Aufwecken (Wake-on-LAN)", "⏻  Wake up (Wake-on-LAN)")))
+                    .add_enabled(!h.mac.trim().is_empty(), egui::Button::image_and_text(icons::image(ui.ctx(), Icon::Power, 15.0, Color32::from_gray(220)), t!("Aufwecken (Wake-on-LAN)", "Wake up (Wake-on-LAN)")))
                     .on_disabled_hover_text(t!("MAC-Adresse unter Bearbeiten → Erweitert eintragen", "Enter the MAC address under Edit → Advanced"))
                     .clicked()
                 {
@@ -690,11 +786,11 @@ impl App {
                 }
             }
             ui.separator();
-            if ui.button(RichText::new(t!("🗑  Löschen", "🗑  Delete")).color(RED)).clicked() {
+            if icons::menu_colored(ui, Icon::Trash, t!("Löschen", "Delete"), RED).clicked() {
                 act = Some(DeviceAction::Delete(i));
             }
         });
-        ui.add_space(4.0);
+        ui.add_space(2.0);
         act
     }
 
@@ -717,12 +813,8 @@ impl App {
         let outer = ui.input(|i| i.viewport().outer_rect);
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
-            let side = if self.prefs.sidebar_open { "◀" } else { "▶" };
-            if ui
-                .add(egui::Button::new(RichText::new(side).color(MUTED)).frame(false).min_size(vec2(30.0, 40.0)))
-                .on_hover_text(t!("Seitenleiste ein/aus (Strg+Umschalt+B)", "Toggle sidebar (Ctrl+Shift+B)"))
-                .clicked()
-            {
+            ui.add_space(6.0);
+            if icons::button(ui, Icon::Sidebar, t!("Seitenleiste ein/aus (Strg+Umschalt+B)", "Toggle sidebar (Ctrl+Shift+B)")).clicked() {
                 self.prefs.sidebar_open = !self.prefs.sidebar_open;
                 self.save_settings();
             }
@@ -752,11 +844,10 @@ impl App {
                                     ui.set_max_width(230.0);
                                     ui.horizontal_centered(|ui| {
                                         ui.spacing_mut().item_spacing.x = 6.0;
-                                        let (glyph, gfont, gcol) = kind_glyph(&t.host, 11.5);
-                                        let (r, _) = ui.allocate_exact_size(vec2(22.0, 18.0), egui::Sense::hover());
-                                        ui.painter().rect_filled(r, 5.0, if active { Color32::from_rgb(0x24, 0x18, 0x45) } else { PANEL2 });
-                                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, glyph, gfont, gcol);
-                                        let c = r.right_top() + vec2(-1.0, 1.0);
+                                        let (ic, gcol) = kind_icon(&t.host);
+                                        let (r, _) = ui.allocate_exact_size(vec2(20.0, 20.0), egui::Sense::hover());
+                                        icons::paint(ui, egui::Rect::from_center_size(r.center(), vec2(15.0, 15.0)), ic, if active { gcol } else { gcol.gamma_multiply(0.75) });
+                                        let c = r.right_top() + vec2(-1.0, 2.0);
                                         ui.painter().circle_filled(c, 4.0, if active { BG } else { PANEL });
                                         ui.painter().circle_filled(c, 2.8, t.status_color());
                                         let mut title = t.title.clone();
@@ -768,11 +859,12 @@ impl App {
                                         if l.clicked() {
                                             act = Some(if t.detached.is_some() { A::Detach(t.id, None) } else { A::Switch(t.id) });
                                         }
-                                        if ui
-                                            .add(egui::Button::new(RichText::new("×").size(16.0).color(MUTED)).frame(false))
-                                            .on_hover_text(t!("Tab schließen (Strg+Umschalt+W)", "Close tab (Ctrl+Shift+W)"))
-                                            .clicked()
-                                        {
+                                        let (cr, cresp) = ui.allocate_exact_size(vec2(20.0, 20.0), egui::Sense::click());
+                                        if cresp.hovered() {
+                                            ui.painter().rect_filled(cr, 5.0, icons::HOVER_BG);
+                                        }
+                                        icons::paint(ui, egui::Rect::from_center_size(cr.center(), vec2(13.0, 13.0)), Icon::Close, if cresp.hovered() { Color32::WHITE } else { MUTED });
+                                        if cresp.on_hover_text(t!("Tab schließen (Strg+Umschalt+W)", "Close tab (Ctrl+Shift+W)")).clicked() {
                                             act = Some(A::Close(t.id));
                                         }
                                     });
@@ -814,42 +906,42 @@ impl App {
                                 t!("Ziehen: in eigenes Fenster · Rechtsklick: mehr", "Drag out: own window · right-click: more")
                             ))
                             .context_menu(|ui| {
-                                if ui.button(t!("⟳  Neu verbinden", "⟳  Reconnect")).clicked() {
+                                if icons::menu(ui, Icon::Refresh, t!("Neu verbinden", "Reconnect")).clicked() {
                                     act = Some(A::Reconnect(id));
                                 }
-                                if ui.button(t!("⧉  Duplizieren", "⧉  Duplicate")).clicked() {
+                                if icons::menu(ui, Icon::Copy, t!("Duplizieren", "Duplicate")).clicked() {
                                     act = Some(A::Duplicate(id));
                                 }
                                 ui.separator();
-                                let split_label = if in_split { t!("◫  Aus geteilter Ansicht nehmen", "◫  Remove from split view") } else { t!("◫  In geteilte Ansicht", "◫  Add to split view") };
-                                if ui.button(split_label).clicked() {
+                                let split_label = if in_split { t!("Aus geteilter Ansicht nehmen", "Remove from split view") } else { t!("In geteilte Ansicht", "Add to split view") };
+                                if icons::menu(ui, Icon::Split, split_label).clicked() {
                                     act = Some(A::Split(id));
                                 }
-                                let win_label = if detached { t!("⇱  Zurück ins Hauptfenster", "⇱  Back to main window") } else { t!("⧉  In eigenem Fenster", "⧉  Open in own window") };
-                                if ui.button(win_label).clicked() {
+                                let win_label = if detached { t!("Zurück ins Hauptfenster", "Back to main window") } else { t!("In eigenem Fenster", "Open in own window") };
+                                if icons::menu(ui, Icon::Window, win_label).clicked() {
                                     act = Some(A::Detach(id, None));
                                 }
-                                if is_ssh && ui.button(t!("⇄  Tunnel…", "⇄  Tunnels…")).clicked() {
+                                if is_ssh && icons::menu(ui, Icon::Tunnel, t!("Tunnel…", "Tunnels…")).clicked() {
                                     act = Some(A::Tunnels(id));
                                 }
                                 ui.separator();
-                                if ui.button(t!("💾  Ausgabe speichern…", "💾  Save output…")).clicked() {
+                                if icons::menu(ui, Icon::Download, t!("Ausgabe speichern…", "Save output…")).clicked() {
                                     act = Some(A::SaveOutput(id));
                                 }
-                                if ui.button(t!("🧹  Terminal leeren", "🧹  Clear terminal")).clicked() {
+                                if icons::menu(ui, Icon::Eraser, t!("Terminal leeren", "Clear terminal")).clicked() {
                                     act = Some(A::Clear(id));
                                 }
                                 ui.separator();
-                                if ui.button(t!("Andere Tabs schließen", "Close other tabs")).clicked() {
+                                if icons::menu(ui, Icon::Close, t!("Andere Tabs schließen", "Close other tabs")).clicked() {
                                     act = Some(A::CloseOthers(id));
                                 }
-                                if ui.button(RichText::new(t!("Schließen", "Close")).color(RED)).clicked() {
+                                if icons::menu_colored(ui, Icon::Close, t!("Schließen", "Close"), RED).clicked() {
                                     act = Some(A::Close(id));
                                 }
                             });
                         }
                         ui.add_space(4.0);
-                        if ghost_button(ui, "+", t!("Neue Verbindung (Strg+Umschalt+T)", "New connection (Ctrl+Shift+T)")).clicked() {
+                        if icons::button(ui, Icon::Plus, t!("Neue Verbindung (Strg+Umschalt+T)", "New connection (Ctrl+Shift+T)")).clicked() {
                             new_tab = true;
                         }
                     });
@@ -860,15 +952,14 @@ impl App {
                 ui.add_space(8.0);
                 let is_ssh = self.active.is_some_and(|a| self.tabs.iter().any(|t| t.id == a && t.is_ssh()));
                 if is_ssh {
-                    let b = egui::Button::new(RichText::new(t!("📂 Dateien", "📂 Files")).strong().color(Color32::WHITE))
-                        .fill(if self.show_files { ACCENT } else { Color32::from_rgb(0x2e, 0x2e, 0x45) });
-                    if ui.add(b).on_hover_text(t!("SFTP-Datei-Explorer (Strg+Umschalt+E)", "SFTP file explorer (Ctrl+Shift+E)")).clicked() {
+                    let fill = if self.show_files { ACCENT } else { Color32::from_rgb(0x2e, 0x2e, 0x45) };
+                    if icons::text_button(ui, Icon::Folder, t!("Dateien", "Files"), fill, Color32::WHITE).on_hover_text(t!("SFTP-Datei-Explorer (Strg+Umschalt+E)", "SFTP file explorer (Ctrl+Shift+E)")).clicked() {
                         self.toggle_files();
                     }
                 }
                 if self.tabs.len() > 1 {
                     let split_on = self.visible_panes().len() > 1;
-                    let b = egui::Button::new(RichText::new("◫").size(15.0).color(Color32::WHITE)).fill(if split_on { ACCENT } else { Color32::from_rgb(0x2e, 0x2e, 0x45) });
+                    let b = egui::Button::new(icons::image(ui.ctx(), Icon::Split, 15.0, Color32::WHITE)).fill(if split_on { ACCENT } else { Color32::from_rgb(0x2e, 0x2e, 0x45) }).min_size(vec2(34.0, 30.0));
                     let r = ui.add(b).on_hover_text(t!("Geteilte Ansicht (Strg+Umschalt+S)", "Split view (Ctrl+Shift+S)"));
                     egui::Popup::menu(&r).show(|ui| {
                         ui.set_min_width(240.0);
@@ -891,9 +982,8 @@ impl App {
                             self.split.clear();
                         }
                     });
-                    let b = egui::Button::new(RichText::new(t!("📡 Alle", "📡 All")).color(if self.broadcast { Color32::BLACK } else { Color32::WHITE }))
-                        .fill(if self.broadcast { AMBER } else { Color32::from_rgb(0x2e, 0x2e, 0x45) });
-                    if ui.add(b).on_hover_text(t!("Broadcast: Eingaben gleichzeitig an alle verbundenen Tabs senden", "Broadcast: send input to all connected tabs at once")).clicked() {
+                    let (fill, fg) = if self.broadcast { (AMBER, Color32::BLACK) } else { (Color32::from_rgb(0x2e, 0x2e, 0x45), Color32::WHITE) };
+                    if icons::text_button(ui, Icon::Broadcast, t!("Alle", "All"), fill, fg).on_hover_text(t!("Broadcast: Eingaben gleichzeitig an alle verbundenen Tabs senden", "Broadcast: send input to all connected tabs at once")).clicked() {
                         self.broadcast = !self.broadcast;
                     }
                 }
@@ -950,7 +1040,12 @@ impl App {
         let mut open_tunnels = None;
         ui.horizontal_centered(|ui| {
             if ui
-                .add(egui::Button::new(RichText::new(t!("⚡ Snippets", "⚡ Snippets")).size(13.0).color(AMBER)).fill(PANEL2).corner_radius(14).min_size(vec2(0.0, 26.0)))
+                .add(
+                    egui::Button::image_and_text(icons::image(ui.ctx(), Icon::Bolt, 14.0, AMBER), RichText::new("Snippets").size(13.0).color(AMBER))
+                        .fill(PANEL2)
+                        .corner_radius(14)
+                        .min_size(vec2(0.0, 26.0)),
+                )
                 .on_hover_text(t!("Befehlsbibliothek (Strg+Umschalt+P)", "Command library (Ctrl+Shift+P)"))
                 .clicked()
             {
@@ -977,12 +1072,12 @@ impl App {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 self.update_badge(ui);
                 if let Some(t) = self.active.and_then(|id| self.tabs.iter().find(|t| t.id == id)) {
-                    let (txt, col) = match t.status {
-                        Status::Connected if t.is_ssh() => (t!("🔒 SSH verschlüsselt", "🔒 SSH encrypted"), GREEN),
-                        Status::Connected if t.host.is_telnet() => (t!("⚠ Telnet unverschlüsselt", "⚠ Telnet unencrypted"), AMBER),
-                        Status::Connected => (t!("🔌 Serial verbunden", "🔌 Serial connected"), AMBER),
-                        Status::Connecting => (t!("… verbinde", "… connecting"), AMBER),
-                        Status::Closed => (t!("✖ getrennt", "✖ disconnected"), RED),
+                    let (icon, txt, col) = match t.status {
+                        Status::Connected if t.is_ssh() => (Icon::Lock, t!("SSH verschlüsselt", "SSH encrypted"), GREEN),
+                        Status::Connected if t.host.is_telnet() => (Icon::Warning, t!("Telnet unverschlüsselt", "Telnet unencrypted"), AMBER),
+                        Status::Connected => (Icon::Plug, t!("Serial verbunden", "Serial connected"), AMBER),
+                        Status::Connecting => (Icon::Clock, t!("verbinde …", "connecting …"), AMBER),
+                        Status::Closed => (Icon::Close, t!("getrennt", "disconnected"), RED),
                     };
                     ui.label(RichText::new(format!("{}×{}", t.term.size.cols, t.term.size.rows)).size(12.0).color(MUTED));
                     if t.log.is_some() {
@@ -993,13 +1088,13 @@ impl App {
                         ui.label(RichText::new(format!("{:02}:{:02}:{:02}", s / 3600, (s / 60) % 60, s % 60)).size(12.0).color(MUTED));
                         ui.ctx().request_repaint_after(std::time::Duration::from_secs(1));
                     }
-                    chip(ui, txt, col);
+                    chip(ui, Some(icon), txt, col);
                     if let Some(s) = &t.ssh {
                         let tun = s.tunnels();
                         if !tun.is_empty() {
                             let bad = tun.iter().any(|x| x.error.is_some());
-                            let txt = tf!("⇄ {} Tunnel", "⇄ {} tunnels", tun.len());
-                            if chip(ui, &txt, if bad { RED } else { CYAN })
+                            let txt = tf!("{} Tunnel", "{} tunnels", tun.len());
+                            if chip(ui, Some(Icon::Tunnel), &txt, if bad { RED } else { CYAN })
                                 .on_hover_text(tun.iter().map(|x| format!("{}{}", x.fwd.label(), x.error.as_ref().map(|e| format!(" – {e}")).unwrap_or_default())).collect::<Vec<_>>().join("\n"))
                                 .clicked()
                             {
@@ -1064,9 +1159,12 @@ fn server_stats(ui: &mut Ui, s: &nebula_core::stats::Stats) {
 }
 
 /// Zwischenüberschrift für Gruppen in der Geräteliste (klickbar).
-fn group_header(ui: &mut Ui, title: &str, count: usize, color: Color32) -> egui::Response {
+fn group_header(ui: &mut Ui, icon: Icon, title: &str, count: usize, color: Color32) -> egui::Response {
+    ui.add_space(4.0);
     let rect = ui
         .horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            icons::show(ui, icon, 13.0, color);
             ui.label(RichText::new(title).size(12.5).strong().color(color));
             ui.label(RichText::new(count.to_string()).size(11.0).color(Color32::from_gray(100)));
         })

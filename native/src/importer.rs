@@ -102,11 +102,7 @@ impl App {
     pub fn import_dialog(&mut self, ui: &mut Ui, rows: &mut Vec<Row>, source: &mut String, error: &mut Option<String>) -> bool {
         let mut keep = true;
         ui.set_width(720.0);
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("📥").size(20.0));
-            ui.label(RichText::new(t!("Verbindungen importieren", "Import connections")).size(19.0).family(egui::FontFamily::Name("ui-bold".into())).color(Color32::WHITE));
-        });
-        ui.add_space(6.0);
+        crate::dialogs::heading(ui, Icon::Import, t!("Verbindungen importieren", "Import connections"));
         ui.label(RichText::new(t!(
             "Übernimmt gespeicherte Sitzungen inklusive Benutzer, Port, Jump-Host und Tunneln. Passwörter werden nicht übernommen – NebulaSSH fragt sie beim ersten Verbinden.",
             "Takes over saved sessions including user, port, jump host and tunnels. Passwords are not imported – NebulaSSH asks for them on first connect."
@@ -132,7 +128,7 @@ impl App {
                 }
             }
             if ui
-                .button(t!("📄 Datei…", "📄 File…"))
+                .add(egui::Button::image_and_text(icons::image(ui.ctx(), Icon::File, 14.0, Color32::from_gray(225)), t!("Datei…", "File…")))
                 .on_hover_text(t!("ssh_config, PuTTY-.reg-Export oder MobaXterm.ini", "ssh_config, PuTTY .reg export or MobaXterm.ini"))
                 .clicked()
             {

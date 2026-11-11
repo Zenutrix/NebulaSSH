@@ -158,11 +158,7 @@ impl App {
         let mut keep = true;
         let screen = ui.ctx().content_rect();
         ui.set_width((screen.width() * 0.75).clamp(560.0, 1000.0));
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("⇅").size(20.0));
-            ui.label(RichText::new(t!("Ordner vergleichen & synchronisieren", "Compare & sync folders")).size(19.0).family(egui::FontFamily::Name("ui-bold".into())).color(Color32::WHITE));
-        });
-        ui.add_space(10.0);
+        crate::dialogs::heading(ui, Icon::Tunnel, t!("Ordner vergleichen & synchronisieren", "Compare & sync folders"));
         egui::Grid::new("sync_paths").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
             label(ui, t!("Server", "Server"));
             ui.add(egui::Label::new(RichText::new(&s.remote).monospace()).truncate());
@@ -188,7 +184,7 @@ impl App {
         ui.horizontal(|ui| {
             let before = s.upload;
             ui.allocate_ui(vec2(360.0, 30.0), |ui| {
-                if let Some(i) = segmented(ui, &[t!("⬆ Lokal → Server", "⬆ Local → server"), t!("⬇ Server → Lokal", "⬇ Server → local")], if s.upload { 0 } else { 1 }) {
+                if let Some(i) = segmented(ui, &[t!("Lokal → Server", "Local → server"), t!("Server → Lokal", "Server → local")], if s.upload { 0 } else { 1 }) {
                     s.upload = i == 0;
                 }
             });
@@ -200,7 +196,7 @@ impl App {
             ui.checkbox(&mut s.hide_same, t!("Gleiche ausblenden", "Hide identical"));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let can = s.local.is_some() && !s.busy;
-                if ui.add_enabled(can, egui::Button::new(if s.compared { t!("⟳ Neu vergleichen", "⟳ Compare again") } else { t!("Vergleichen", "Compare") })).clicked() {
+                if ui.add_enabled(can, egui::Button::new(if s.compared { t!("Neu vergleichen", "Compare again") } else { t!("Vergleichen", "Compare") })).clicked() {
                     self.start_compare(s);
                 }
             });
@@ -289,9 +285,9 @@ impl App {
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let text = if s.upload {
-                    tf!("⬆ {} Dateien hochladen ({})", "⬆ Upload {} files ({})", selected.len(), human_size(total))
+                    tf!("{} Dateien hochladen ({})", "Upload {} files ({})", selected.len(), human_size(total))
                 } else {
-                    tf!("⬇ {} Dateien herunterladen ({})", "⬇ Download {} files ({})", selected.len(), human_size(total))
+                    tf!("{} Dateien herunterladen ({})", "Download {} files ({})", selected.len(), human_size(total))
                 };
                 let b = egui::Button::new(RichText::new(text).strong().color(Color32::WHITE)).fill(ACCENT).min_size(vec2(220.0, 34.0));
                 if ui.add_enabled(!selected.is_empty() && !s.busy, b).clicked() {

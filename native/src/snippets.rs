@@ -8,13 +8,7 @@ use eframe::egui::{self, vec2, Align, Color32, Key, Layout, RichText, ScrollArea
 use nebula_core::ssh::Forward;
 use nebula_core::{t, tf};
 
-fn heading(ui: &mut Ui, icon: &str, text: &str) {
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(icon).size(20.0));
-        ui.label(RichText::new(text).size(19.0).family(egui::FontFamily::Name("ui-bold".into())).color(Color32::WHITE));
-    });
-    ui.add_space(10.0);
-}
+use crate::dialogs::heading;
 
 impl App {
     pub fn open_snippets(&mut self) {
@@ -48,7 +42,7 @@ impl App {
         let mut keep = true;
         ui.set_width(680.0);
         if let Some((idx, s)) = edit {
-            heading(ui, "⚡", if idx.is_some() { t!("Snippet bearbeiten", "Edit snippet") } else { t!("Neues Snippet", "New snippet") });
+            heading(ui, Icon::Bolt, if idx.is_some() { t!("Snippet bearbeiten", "Edit snippet") } else { t!("Neues Snippet", "New snippet") });
             field(ui, t!("Name *", "Name *"), &mut s.name, t!("z.B. Speicher prüfen", "e.g. check memory"));
             field(ui, t!("Gruppe", "Group"), &mut s.group, t!("z.B. Docker", "e.g. Docker"));
             label(ui, t!("Befehl(e) *", "Command(s) *"));
@@ -107,7 +101,7 @@ impl App {
             return keep;
         }
 
-        heading(ui, "⚡", t!("Snippets", "Snippets"));
+        heading(ui, Icon::Bolt, t!("Snippets", "Snippets"));
         let mut run: Option<Snippet> = None;
         let mut insert: Option<Snippet> = None;
         let mut new_edit: Option<(Option<usize>, Snippet)> = None;
@@ -116,7 +110,7 @@ impl App {
         ui.horizontal(|ui| {
             let r = ui.add(
                 TextEdit::singleline(query)
-                    .hint_text(t!("🔍 Suchen – Enter führt den ersten Treffer aus", "🔍 Search – Enter runs the first match"))
+                    .hint_text(t!("Suchen – Enter führt den ersten Treffer aus", "Search – Enter runs the first match"))
                     .desired_width(ui.available_width() - 150.0),
             );
             if *focus {
@@ -161,7 +155,7 @@ impl App {
                                 ui.horizontal(|ui| {
                                     ui.label(RichText::new(&s.name).strong().color(Color32::WHITE));
                                     if s.pinned {
-                                        ui.label(RichText::new("📌").size(11.0)).on_hover_text(t!("In der Statusleiste", "In the status bar"));
+                                        icons::show(ui, Icon::StarFill, 12.0, AMBER).on_hover_text(t!("In der Statusleiste", "In the status bar"));
                                     }
                                     let ph = s.placeholders();
                                     if !ph.is_empty() {
@@ -174,10 +168,10 @@ impl App {
                             });
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 ui.spacing_mut().item_spacing.x = 3.0;
-                                if !s.is_default && ui.small_button("🗑").on_hover_text(t!("Löschen", "Delete")).clicked() {
+                                if !s.is_default && crate::sidebar::icon_button(ui, Icon::Trash, "").on_hover_text(t!("Löschen", "Delete")).clicked() {
                                     delete = Some(i);
                                 }
-                                if ui.small_button("✎").on_hover_text(t!("Bearbeiten (als Kopie bei Standard-Snippets)", "Edit (as a copy for built-in snippets)")).clicked() {
+                                if crate::sidebar::icon_button(ui, Icon::Pencil, "").on_hover_text(t!("Bearbeiten (als Kopie bei Standard-Snippets)", "Edit (as a copy for built-in snippets)")).clicked() {
                                     let mut c = s.clone();
                                     if c.is_default {
                                         c.name = tf!("{} (eigen)", "{} (custom)", c.name);
@@ -186,13 +180,13 @@ impl App {
                                         new_edit = Some((Some(i), c));
                                     }
                                 }
-                                if ui.small_button("📌").on_hover_text(t!("In der Statusleiste an/aus", "Toggle in the status bar")).clicked() {
+                                if crate::sidebar::icon_button(ui, Icon::StarFill, "").on_hover_text(t!("In der Statusleiste an/aus", "Toggle in the status bar")).clicked() {
                                     pin = Some(i);
                                 }
                                 if ui.small_button(t!("Einfügen", "Insert")).on_hover_text(t!("Ins Terminal schreiben, ohne Enter", "Write into the terminal without Enter")).clicked() {
                                     insert = Some(s.clone());
                                 }
-                                if ui.add(egui::Button::new(RichText::new(t!("▶ Ausführen", "▶ Run")).color(Color32::WHITE)).fill(ACCENT)).clicked() {
+                                if ui.add(egui::Button::image_and_text(icons::image(ui.ctx(), Icon::Play, 14.0, Color32::WHITE), RichText::new(t!("Ausführen", "Run")).color(Color32::WHITE)).fill(ACCENT)).clicked() {
                                     run = Some(s.clone());
                                 }
                             });
@@ -247,7 +241,7 @@ impl App {
     pub fn run_snippet_dialog(&mut self, ui: &mut Ui, snippet: &Snippet, values: &mut [(String, String)], enter: &mut bool) -> bool {
         let mut keep = true;
         ui.set_width(460.0);
-        heading(ui, "⚡", &snippet.name);
+        heading(ui, Icon::Bolt, &snippet.name);
         ui.label(RichText::new(snippet.cmd.trim_end()).monospace().size(12.0).color(MUTED));
         ui.add_space(8.0);
         let mut submit = false;
@@ -269,7 +263,7 @@ impl App {
                 keep = false;
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.add(egui::Button::new(RichText::new(t!("▶ Senden", "▶ Send")).strong().color(Color32::WHITE)).fill(ACCENT).min_size(vec2(140.0, 34.0))).clicked() {
+                if ui.add(egui::Button::image_and_text(icons::image(ui.ctx(), Icon::Play, 14.0, Color32::WHITE), RichText::new(t!("Senden", "Send")).color(Color32::WHITE).strong()).fill(ACCENT).min_size(vec2(140.0, 34.0))).clicked() {
                     submit = true;
                 }
             });
@@ -301,7 +295,7 @@ impl App {
     pub fn tunnels_dialog(&mut self, ui: &mut Ui, tab: u64, new: &mut Forward, save: &mut bool) -> bool {
         let mut keep = true;
         ui.set_width(600.0);
-        heading(ui, "⇄", t!("Tunnel (Port-Weiterleitung)", "Tunnels (port forwarding)"));
+        heading(ui, Icon::Tunnel, t!("Tunnel (Port-Weiterleitung)", "Tunnels (port forwarding)"));
         let Some((sess, title, host)) = self.tabs.iter().find(|t| t.id == tab).map(|t| (t.ssh.clone(), t.title.clone(), t.host.clone())) else {
             return false;
         };

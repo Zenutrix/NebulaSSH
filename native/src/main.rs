@@ -6,6 +6,7 @@ mod clipboard;
 mod data;
 mod dialogs;
 mod files;
+mod icons;
 mod importer;
 mod sidebar;
 mod snippets;
