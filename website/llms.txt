@@ -1,0 +1,41 @@
+# NebulaSSH
+
+> NebulaSSH ist ein kostenloser, nativer SSH-Client für Windows 10 und 11 von Thomas Schöpf. Er vereint SSH-Terminal mit Tabs, SFTP-Explorer mit Editor, Port-Weiterleitung, Jump-Host, Telnet und serielle Konsole in einem Fenster und ist eine Alternative zu PuTTY, MobaXterm und WinSCP. Geschrieben in Rust, kein Browser und kein Cloud-Dienst: Daten bleiben verschlüsselt auf dem eigenen PC.
+
+Wichtig zur Abgrenzung: Diese NebulaSSH ist eine Desktop-App für Windows (Download als Installer oder portable EXE), kein Web-SSH-Dienst im Browser und ohne Konto oder Abo.
+
+- Website (Deutsch): https://schoepf-tirol.at/Project/NebulaSSH/
+- Website (English): https://schoepf-tirol.at/Project/NebulaSSH/en/
+- Quellcode und Releases: https://github.com/Zenutrix/NebulaSSH
+- Download Installer: https://github.com/Zenutrix/NebulaSSH/releases/latest/download/NebulaSSH-Setup.exe
+- Download portable: https://github.com/Zenutrix/NebulaSSH/releases/latest/download/NebulaSSH-portable.exe
+- Preis: kostenlos, ohne Werbung, ohne Pro-Version
+- System: Windows 10 und 11, 64 Bit; keine Laufzeitumgebung nötig
+- Sprachen: Deutsch und Englisch
+
+## Funktionen
+
+- SSH-Terminal mit Tabs, geteilter Ansicht (bis zu vier Terminals) und Tabs in eigenen Fenstern
+- SFTP-Explorer: hochladen, herunterladen, Dateien im Editor bearbeiten und mit Strg+S speichern
+- Ordner vergleichen und synchronisieren, Übertragungen pausieren und fortsetzen
+- Port-Weiterleitung: lokal (-L), remote (-R) und SOCKS (-D), pro Gerät speicherbar
+- Jump-Host (ProxyJump) und SSH-Agent (Pageant, Windows OpenSSH, 1Password, KeePassXC) inkl. Agent-Weiterleitung
+- Telnet und serielle Konsole (COM-Port, frei wählbare Baudrate), Broadcast an alle Tabs
+- X11-Weiterleitung für grafische Linux-Programme
+- Import aus PuTTY, MobaXterm und ~/.ssh/config
+- Snippet-Bibliothek mit Platzhaltern
+- SSH-Keys erzeugen (Ed25519, RSA, ECDSA) und auf dem Server hinterlegen
+- Server-Auslastung (CPU, RAM, Festplatte) in der Statusleiste, Wake-on-LAN, Ping, Port-Prüfung
+- Sicherheit: Host-Key-Prüfung, AES-256-verschlüsselte Ablage, App-Sperre (Argon2id), signierte Auto-Updates
+
+## Vergleich
+
+- Gegenüber PuTTY: zusätzlich Tabs, SFTP-Explorer mit Editor, Jump-Host, geteilte Ansicht, Ordnerabgleich, deutsche Oberfläche
+- Gegenüber MobaXterm: ohne Limit bei Sitzungen und Tunneln, deutsche Oberfläche, Ordnerabgleich, schlanker (rund 150 MB RAM im Leerlauf)
+- Gegenüber WinSCP: Dateiübertragung plus vollwertiges Terminal in einem Programm
+
+## English summary
+
+NebulaSSH is a free, native SSH client for Windows 10 and 11 by Thomas Schöpf. It combines a tabbed SSH terminal, an SFTP file browser with editor and folder sync, port forwarding (-L, -R, SOCKS), jump hosts, SSH agent support, Telnet and serial consoles (COM port) in one window. It is an alternative to PuTTY, MobaXterm and WinSCP: free without limits, no account, no ads, written in Rust (about 150 MB RAM when idle), interface in English and German, imports sessions from PuTTY, MobaXterm and ~/.ssh/config.
+
+Not to be confused with web-based SSH services of a similar name: this NebulaSSH is a Windows desktop app distributed via GitHub releases (installer or portable EXE).

@@ -7,19 +7,23 @@ use nebula_core::{t, tf};
 use rfd::MessageLevel;
 
 pub fn toggle(ui: &mut Ui, label: &str, on: bool, width: f32) -> bool {
-    let text = RichText::new(label).strong().color(if on { Color32::WHITE } else { MUTED });
+    // Bei schmaler Seitenleiste lieber kleinere Schrift als „Pass…“
+    let size = if label.chars().count() as f32 * 7.6 > width - 12.0 { 11.5 } else { 13.0 };
+    let text = RichText::new(label).size(size).strong().color(if on { Color32::WHITE } else { MUTED });
     let b = egui::Button::new(text)
         .fill(if on { ACCENT } else { FIELD })
         .stroke(Stroke::NONE)
         .corner_radius(CornerRadius::same(5))
-        .min_size(vec2(width, 30.0));
-    ui.add(b).clicked()
+        .truncate();
+    // Feste Breite: längere Beschriftungen werden gekürzt statt die Seitenleiste aufzuschieben
+    ui.add_sized(vec2(width, 30.0), b).clicked()
 }
 
 /// Mehrere Umschalter nebeneinander; liefert den angeklickten Index.
 pub fn segmented(ui: &mut Ui, labels: &[&str], current: usize) -> Option<usize> {
     let mut res = None;
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
         let n = labels.len() as f32;
         let w = (ui.available_width() - 6.0 * (n - 1.0)) / n;
         for (i, l) in labels.iter().enumerate() {
@@ -102,7 +106,8 @@ pub fn badge_icon(ui: &mut Ui, icon: Icon, size: f32, color: Color32) {
 
 /// Breite für ein dehnbares Feld, wenn danach noch `buttons` Symbolknöpfe folgen.
 pub fn fill_width(ui: &Ui, buttons: usize) -> f32 {
-    (ui.available_width() - buttons as f32 * (32.0 + ui.spacing().item_spacing.x) - 4.0).max(60.0)
+    // 12 px Reserve: TextEdit und ComboBox zeichnen ihren Innenabstand zusätzlich zur gewünschten Breite
+    (ui.available_width() - buttons as f32 * (32.0 + ui.spacing().item_spacing.x) - 12.0).max(60.0)
 }
 
 /// Kleiner farbiger Chip (z.B. in der Statusleiste)
@@ -241,6 +246,7 @@ impl App {
             ui.ctx().data_mut(|d| d.insert_temp(open_id, open));
             ui.add_space(16.0);
             self.device_list(ui);
+
         });
     }
 
@@ -374,6 +380,7 @@ impl App {
         }
 
         ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
             let w = (ui.available_width() - 6.0) / 2.0;
             let can = !self.form.is_serial() || !self.form.port.is_empty();
             if ui
@@ -694,9 +701,9 @@ impl App {
                         }
                     }
                     let show_star = h.favorite || was_hovered;
-                    let right = marks.len() as f32 * 17.0 + if show_star { 26.0 } else { 0.0 };
+                    let right = marks.len() as f32 * 17.0 + if show_star { 28.0 } else { 0.0 };
                     ui.vertical(|ui| {
-                        ui.set_width((ui.available_width() - right - 4.0).max(40.0));
+                        ui.set_width((ui.available_width() - right - 8.0).max(40.0));
                         ui.spacing_mut().item_spacing.y = 1.0;
                         ui.add(egui::Label::new(RichText::new(h.display_name()).strong().color(Color32::WHITE)).truncate());
                         ui.add(egui::Label::new(RichText::new(h.subtitle()).size(11.5).color(MUTED)).truncate());
@@ -834,6 +841,7 @@ impl App {
                                 _ => ACCENT_HI,
                             };
                             let fill = if active { BG } else if shown { Color32::from_rgb(0x14, 0x14, 0x1f) } else { Color32::TRANSPARENT };
+                            let mut close_rect = egui::Rect::NOTHING;
                             let resp = egui::Frame::new()
                                 .fill(fill)
                                 .corner_radius(CornerRadius { nw: 9, ne: 9, sw: 0, se: 0 })
@@ -859,14 +867,15 @@ impl App {
                                         if l.clicked() {
                                             act = Some(if t.detached.is_some() { A::Detach(t.id, None) } else { A::Switch(t.id) });
                                         }
-                                        let (cr, cresp) = ui.allocate_exact_size(vec2(20.0, 20.0), egui::Sense::click());
-                                        if cresp.hovered() {
+                                        // Das X wertet der Tab-Klick unten aus: die Zieh-Fläche des Tabs liegt
+                                        // darüber und würde dem X sonst den Klick wegnehmen.
+                                        let (cr, _) = ui.allocate_exact_size(vec2(20.0, 20.0), egui::Sense::hover());
+                                        close_rect = cr;
+                                        let hov = ui.rect_contains_pointer(cr);
+                                        if hov {
                                             ui.painter().rect_filled(cr, 5.0, icons::HOVER_BG);
                                         }
-                                        icons::paint(ui, egui::Rect::from_center_size(cr.center(), vec2(13.0, 13.0)), Icon::Close, if cresp.hovered() { Color32::WHITE } else { MUTED });
-                                        if cresp.on_hover_text(t!("Tab schließen (Strg+Umschalt+W)", "Close tab (Ctrl+Shift+W)")).clicked() {
-                                            act = Some(A::Close(t.id));
-                                        }
+                                        icons::paint(ui, egui::Rect::from_center_size(cr.center(), vec2(13.0, 13.0)), Icon::Close, if hov { Color32::WHITE } else { MUTED });
                                     });
                                 })
                                 .response
@@ -889,8 +898,16 @@ impl App {
                                     }
                                 }
                             }
+                            let on_close = resp.hover_pos().is_some_and(|p| close_rect.expand(2.0).contains(p));
+                            let resp = if on_close { resp.on_hover_text(t!("Tab schließen (Strg+Umschalt+W)", "Close tab (Ctrl+Shift+W)")) } else { resp };
                             if resp.clicked() {
-                                act = Some(if t.detached.is_some() { A::Detach(t.id, None) } else { A::Switch(t.id) });
+                                act = Some(if on_close {
+                                    A::Close(t.id)
+                                } else if t.detached.is_some() {
+                                    A::Detach(t.id, None)
+                                } else {
+                                    A::Switch(t.id)
+                                });
                             }
                             if resp.middle_clicked() {
                                 act = Some(A::Close(t.id));

@@ -1,5 +1,4 @@
-Neues, einheitliches Icon-Set statt Emoji in der ganzen App
-Überarbeitete Seitenleiste mit Geräte-Kacheln, Schnellzugriff und aufgeräumter Statusleiste
-Einstellungen neu gestaltet: Navigation links, Schalter statt Häkchen
-Neue Server: Fingerprint-Prüfung als eigener Dialog mit Kopier-Knöpfen statt Windows-Meldung
-Fehler behoben: Datei-Explorer wurde bei jeder Aktualisierung breiter
+Seitenleiste springt nach dem Ziehen nicht mehr auf die alte Breite zurück
+Das X am Tab schließt jetzt zuverlässig, auch nach einer fehlgeschlagenen Verbindung
+Fehlgeschlagene oder getrennte Verbindung: Leiste oben im Terminal mit Fehlergrund, „Neu verbinden“ und „Tab schließen“
+Anmelde-Auswahl in schmaler Seitenleiste wird nicht mehr abgekürzt

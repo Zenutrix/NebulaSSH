@@ -1,0 +1,1062 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NebulaSSH – Free SSH Client for Windows | PuTTY &amp; MobaXterm Alternative</title>
+<meta name="description" content="NebulaSSH is a free SSH client for Windows 10 and 11: tabs, an SFTP browser with editor, tunnels, jump hosts, Telnet and serial console in one window. A modern alternative to PuTTY, MobaXterm and WinSCP – 4.6 MB, no account.">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="author" content="Thomas Schöpf">
+<meta name="application-name" content="NebulaSSH">
+<link rel="canonical" href="https://schoepf-tirol.at/Project/NebulaSSH/en/">
+<link rel="alternate" hreflang="de" href="https://schoepf-tirol.at/Project/NebulaSSH/">
+<link rel="alternate" hreflang="en" href="https://schoepf-tirol.at/Project/NebulaSSH/en/">
+<link rel="alternate" hreflang="x-default" href="https://schoepf-tirol.at/Project/NebulaSSH/en/">
+<link rel="alternate" type="text/plain" title="Summary for AI assistants" href="https://schoepf-tirol.at/Project/NebulaSSH/llms.txt">
+<link rel="sitemap" type="application/xml" href="https://schoepf-tirol.at/Project/NebulaSSH/sitemap.xml">
+<meta name="theme-color" content="#0d0a1a">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="NebulaSSH">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="de_AT">
+<meta property="og:url" content="https://schoepf-tirol.at/Project/NebulaSSH/en/">
+<meta property="og:title" content="NebulaSSH – free SSH client for Windows">
+<meta property="og:description" content="SSH, SFTP, Telnet and serial console in one window. Native Rust, no browser under the hood – an alternative to PuTTY and MobaXterm.">
+<meta property="og:image" content="https://schoepf-tirol.at/Project/NebulaSSH/screenshots/main.png">
+<meta property="og:image:width" content="1384">
+<meta property="og:image:height" content="861">
+<meta property="og:image:alt" content="NebulaSSH with an SSH session, the SFTP browser and server load in the status bar">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="NebulaSSH – free SSH client for Windows">
+<meta name="twitter:description" content="SSH, SFTP, Telnet and serial console in one window. An alternative to PuTTY and MobaXterm.">
+<meta name="twitter:image" content="https://schoepf-tirol.at/Project/NebulaSSH/screenshots/main.png">
+<link rel="icon" href="../icon.png">
+<link rel="apple-touch-icon" href="../logo.png">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "WebSite",
+   "@id": "https://schoepf-tirol.at/Project/NebulaSSH/#website",
+   "url": "https://schoepf-tirol.at/Project/NebulaSSH/",
+   "name": "NebulaSSH",
+   "inLanguage": [
+    "de",
+    "en"
+   ],
+   "publisher": {
+    "@id": "https://schoepf-tirol.at/Project/NebulaSSH/#author"
+   }
+  },
+  {
+   "@type": "Person",
+   "@id": "https://schoepf-tirol.at/Project/NebulaSSH/#author",
+   "name": "Thomas Schöpf",
+   "url": "https://schoepf-tirol.at/",
+   "sameAs": [
+    "https://github.com/Zenutrix"
+   ]
+  },
+  {
+   "@type": "SoftwareApplication",
+   "@id": "https://schoepf-tirol.at/Project/NebulaSSH/#app",
+   "name": "NebulaSSH",
+   "url": "https://schoepf-tirol.at/Project/NebulaSSH/en/",
+   "description": "Free, native SSH client for Windows with tabs, an SFTP browser and editor, folder sync, port forwarding, jump hosts, SSH agent support, Telnet and serial consoles. An alternative to PuTTY, MobaXterm and WinSCP.",
+   "applicationCategory": "DeveloperApplication",
+   "applicationSubCategory": "SSH client",
+   "operatingSystem": "Windows 10, Windows 11 (64-bit)",
+   "softwareVersion": "2.3.2",
+   "fileSize": "4.6 MB",
+   "inLanguage": [
+    "en",
+    "de"
+   ],
+   "isAccessibleForFree": true,
+   "downloadUrl": "https://github.com/Zenutrix/NebulaSSH/releases/latest/download/NebulaSSH-Setup.exe",
+   "installUrl": "https://github.com/Zenutrix/NebulaSSH/releases/latest",
+   "codeRepository": "https://github.com/Zenutrix/NebulaSSH",
+   "screenshot": [
+    "https://schoepf-tirol.at/Project/NebulaSSH/screenshots/main.png",
+    "https://schoepf-tirol.at/Project/NebulaSSH/screenshots/split.png",
+    "https://schoepf-tirol.at/Project/NebulaSSH/screenshots/sync.png"
+   ],
+   "image": "https://schoepf-tirol.at/Project/NebulaSSH/logo.png",
+   "author": {
+    "@id": "https://schoepf-tirol.at/Project/NebulaSSH/#author"
+   },
+   "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "EUR"
+   },
+   "featureList": [
+    "SSH terminal with tabs and split view",
+    "SFTP file browser with editor",
+    "Compare and sync folders",
+    "Local, remote and SOCKS port forwarding",
+    "Jump host (ProxyJump)",
+    "SSH agent: Pageant, Windows OpenSSH, 1Password, KeePassXC",
+    "Telnet and serial console (COM port)",
+    "X11 forwarding",
+    "Import from PuTTY, MobaXterm and ~/.ssh/config",
+    "Snippet library",
+    "Encrypted storage and app lock",
+    "Signed automatic updates"
+   ],
+   "keywords": "SSH client Windows, PuTTY alternative, MobaXterm alternative, WinSCP alternative, SFTP client, Telnet client, serial console, Windows terminal"
+  },
+  {
+   "@type": "FAQPage",
+   "@id": "https://schoepf-tirol.at/Project/NebulaSSH/en/#faq",
+   "inLanguage": "en",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Is NebulaSSH a good PuTTY alternative?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. NebulaSSH imports your saved PuTTY sessions and adds what PuTTY is missing: tabs, an SFTP file browser with a built-in editor, saved tunnels, jump hosts, snippets and a split view with up to four terminals. Telnet and serial consoles work just like in PuTTY."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "How is NebulaSSH different from MobaXterm?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "NebulaSSH focuses on SSH, SFTP, Telnet and serial consoles and is free without limits: there is no cap on sessions or tunnels. It is written in Rust and uses around 150 MB of RAM when idle. MobaXterm sessions can be imported directly."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Is NebulaSSH free?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. NebulaSSH is completely free, with no account, no ads and no paid edition. The source code is on GitHub."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Is NebulaSSH a web-based SSH client?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "No. NebulaSSH is a native Windows desktop app that runs on your own PC. There is no cloud service and no account: devices, passwords and keys stay on your computer, encrypted with AES-256."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can I import my sessions from PuTTY, MobaXterm or ~/.ssh/config?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. The importer reads saved sessions from PuTTY, MobaXterm and the OpenSSH config file ~/.ssh/config and adds them as devices in NebulaSSH."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Is there a portable version that needs no installation?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. NebulaSSH-portable.exe is a single file for a USB stick. Devices and settings are stored in the same folder as the EXE."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Which versions of Windows are supported?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Windows 10 and Windows 11, 64-bit. No WebView2, .NET or other runtime is required."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can NebulaSSH transfer files like WinSCP?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. The built-in SFTP browser uploads and downloads files and folders, opens files in the editor and saves them straight back to the server with Ctrl+S. Local folders can be compared and synced with the server."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does NebulaSSH work with switches, routers and serial consoles?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Besides SSH, NebulaSSH supports Telnet for older network gear and serial connections over COM ports with any baud rate. Broadcast sends one command to all open tabs at once."
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script>document.documentElement.classList.add('js')</script>
+<style>
+  :root {
+    --space: #0d0a1a;        /* unterer Rand des Logos */
+    --panel: #171329;
+    --panel-2: #201b36;
+    --line: #2c2645;
+    --line-hi: #463c72;
+    --violet: #6200ee;       /* Akzent der App */
+    --violet-hi: #7a2bff;
+    --lavender: #c6b6ff;
+    --amber: #ffb547;        /* Cursor-Balken im Logo */
+    --green: #7ee08a;
+    --text: #f1edff;
+    --muted: #a49dc2;
+    --wrap: 1200px;
+    --ease: cubic-bezier(.2, .7, .2, 1);
+    --display: "Bricolage Grotesque", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+  body {
+    margin: 0; background: var(--space); color: var(--text);
+    font-family: var(--display); font-size: 1.0625rem; line-height: 1.6;
+    -webkit-font-smoothing: antialiased; overflow-x: clip;
+  }
+  a { color: var(--lavender); text-underline-offset: 3px; }
+  a:hover { color: #fff; }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; border-radius: 6px; }
+  img { max-width: 100%; height: auto; display: block; }
+  figure { margin: 0; }
+  .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 28px; }
+  code, kbd { font-family: var(--mono); }
+  code { font-size: .86em; color: var(--lavender); }
+  kbd { font-size: .8em; background: var(--panel-2); border: 1px solid var(--line-hi); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--text); white-space: nowrap; }
+
+  /* ---------- Vergleich ---------- */
+  .cmp-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); }
+  .cmp { width: 100%; border-collapse: collapse; min-width: 620px; font-size: .98rem; }
+  .cmp caption { caption-side: bottom; text-align: left; padding: 14px 22px; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); }
+  .cmp th, .cmp td { padding: 14px 22px; text-align: left; border-top: 1px solid var(--line); }
+  .cmp thead th { border-top: 0; font-size: .9rem; color: var(--muted); font-weight: 600; }
+  .cmp tbody th { font-weight: 500; }
+  .cmp td { color: var(--muted); font-size: .92rem; }
+  .cmp .us { background: rgba(98,0,238,.14); color: var(--text); }
+  .cmp thead .us { color: #fff; }
+  .cmp .y { color: var(--green); font-weight: 700; font-size: 1.05rem; }
+  .cmp .us .y { color: var(--lavender); }
+  .cmp .n { color: #6d6690; }
+  .cmp-note { color: var(--muted); margin: 22px 0 0; max-width: 46em; }
+
+  /* ---------- FAQ ---------- */
+  .faq-wrap { display: grid; grid-template-columns: .8fr 1.2fr; gap: 56px; align-items: start; }
+  .faq-wrap .intro { margin-bottom: 0; }
+  .faq-list details { border-top: 1px solid var(--line); }
+  .faq-list details:last-child { border-bottom: 1px solid var(--line); }
+  .faq-list summary { list-style: none; cursor: pointer; padding: 20px 40px 20px 0; position: relative; }
+  .faq-list summary::-webkit-details-marker { display: none; }
+  .faq-list summary h3 { margin: 0; font-size: 1.12rem; font-weight: 600; }
+  .faq-list summary::after { content: "+"; position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 1.5rem; color: var(--lavender); transition: transform .2s var(--ease); }
+  .faq-list details[open] summary::after { transform: translateY(-50%) rotate(45deg); }
+  .faq-list details p { margin: 0 0 22px; color: var(--muted); max-width: 40em; }
+  @media (max-width: 900px) { .faq-wrap { grid-template-columns: 1fr; gap: 24px; } }
+
+  /* ---------- Kopfzeile ---------- */
+  header.top { position: sticky; top: 0; z-index: 20; background: rgba(13,10,26,.72); backdrop-filter: blur(14px) saturate(140%); border-bottom: 1px solid transparent; transition: border-color .2s; }
+  header.top.scrolled { border-bottom-color: var(--line); }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 66px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.18rem; color: #fff; text-decoration: none; letter-spacing: -.015em; }
+  .brand img { width: 30px; height: 30px; border-radius: 8px; }
+  .brand span { color: var(--lavender); }
+  nav.top { display: flex; align-items: center; gap: 28px; }
+  nav.top a.lang { font-size: .82rem; font-weight: 700; letter-spacing: .04em; border: 1px solid var(--line-hi); border-radius: 7px; padding: 3px 8px; }
+  nav.top a { color: var(--muted); text-decoration: none; font-size: .95rem; }
+  nav.top a:hover { color: #fff; }
+  nav.top a.cta { color: #fff; background: var(--violet); padding: 8px 16px; border-radius: 9px; font-weight: 600; }
+  nav.top a.cta:hover { background: var(--violet-hi); }
+  .progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 100%; background: linear-gradient(90deg, var(--violet), var(--amber)); transform-origin: left; transform: scaleX(var(--p, 0)); }
+
+  /* ---------- Buttons ---------- */
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 15px 24px; border-radius: 12px; font-weight: 600; text-decoration: none; font-size: 1.02rem; transition: background .15s, border-color .15s, transform .2s var(--ease), box-shadow .2s; position: relative; overflow: hidden; }
+  .btn-primary { background: var(--violet); color: #fff; box-shadow: 0 12px 34px -12px #6200eecc, inset 0 1px 0 #ffffff30; }
+  .btn-primary:hover { background: var(--violet-hi); color: #fff; transform: translateY(-2px); box-shadow: 0 18px 40px -12px #7a2bffee, inset 0 1px 0 #ffffff30; }
+  .btn-primary::after { /* Lichtkante, läuft einmal beim Hover durch */
+    content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, #ffffff40 50%, transparent 70%); transform: translateX(-120%);
+  }
+  .btn-primary:hover::after { transition: transform .7s var(--ease); transform: translateX(120%); }
+  .btn-ghost { color: var(--text); border: 1px solid var(--line-hi); }
+  .btn-ghost:hover { border-color: var(--lavender); color: #fff; transform: translateY(-2px); }
+  .btn small { font-weight: 400; opacity: .7; font-family: var(--mono); font-size: .78rem; }
+  .btn svg { flex: none; }
+
+  /* ---------- Hero ---------- */
+  .hero { position: relative; padding: 72px 0 0; isolation: isolate; overflow-x: clip; }
+  .hero::before { /* Nebel */
+    content: ""; position: absolute; inset: -66px 0 auto; height: 1000px; z-index: -2; pointer-events: none;
+    background:
+      radial-gradient(48% 52% at 74% 30%, #5a1fd955, transparent 70%),
+      radial-gradient(30% 34% at 18% 12%, #2b146699, transparent 75%),
+      radial-gradient(22% 20% at 90% 70%, #ffb5471a, transparent 75%);
+    animation: drift 18s ease-in-out infinite alternate;
+  }
+  @keyframes drift { to { transform: translate3d(-3%, 2%, 0) scale(1.06); } }
+  .stars { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+  .stars i { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #d9ccff; opacity: .55; animation: twinkle 3.6s ease-in-out infinite; }
+  .stars i:nth-child(2n) { animation-duration: 5.2s; animation-delay: -2s; }
+  .stars i:nth-child(3n) { animation-duration: 4.4s; animation-delay: -1s; }
+  .stars i.a { background: var(--amber); width: 6px; height: 6px; box-shadow: 0 0 12px var(--amber); }
+  .stars i.b { width: 8px; height: 8px; background: #fff; box-shadow: 0 0 14px #fff; }
+  @keyframes twinkle { 50% { opacity: .15; transform: scale(.6); } }
+
+  .hero-text { max-width: 660px; position: relative; z-index: 2; }
+  .hero h1 {
+    font-size: clamp(3rem, 7.4vw, 6.4rem); line-height: .94; letter-spacing: -.045em; font-weight: 800;
+    margin: 0 0 28px; font-variation-settings: "opsz" 96;
+  }
+  .hero h1 .l2 { display: block; color: var(--lavender); }
+  .w { display: inline-block; }
+  .js .w { opacity: 0; transform: translateY(.45em); filter: blur(10px); animation: rise .9s var(--ease) forwards; animation-delay: var(--d, 0s); }
+  @keyframes rise { to { opacity: 1; transform: none; filter: none; } }
+  .js .fade { opacity: 0; transform: translateY(14px); animation: rise .8s var(--ease) forwards; animation-delay: var(--d, 0s); }
+  .cursor { display: inline-block; width: .5em; height: .13em; margin-left: .08em; background: var(--amber); border-radius: .07em; vertical-align: baseline; box-shadow: 0 0 24px #ffb54788; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .lead { color: var(--muted); font-size: 1.24rem; max-width: 31em; margin: 0 0 36px; }
+  .lead strong { color: var(--text); font-weight: 500; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 14px; }
+  .meta { margin: 18px 0 0; color: var(--muted); font-size: .9rem; }
+
+  /* Fenster mit Orbit – kippt beim Scrollen flach */
+  .stage { position: relative; margin-top: 64px; perspective: 2000px; }
+  .tilt { position: relative; transform-origin: 50% 0; transform: rotateX(var(--rx, 0deg)) scale(var(--sc, 1)); will-change: transform; }
+  .js .tilt { opacity: 0; animation: up 1.2s var(--ease) .55s forwards; }
+  @keyframes up { from { opacity: 0; translate: 0 60px; } to { opacity: 1; translate: 0 0; } }
+  .orbit { position: absolute; z-index: 1; left: 50%; top: 50%; width: 132%; height: auto; transform: translate(-50%, -71%); pointer-events: none; overflow: visible; }
+  .orbit .back { opacity: .55; }
+  .orbit path { fill: none; stroke-width: 3; stroke-linecap: round; }
+  .orbit .draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 2.2s cubic-bezier(.6,0,.2,1) .9s forwards; }
+  .orbit .comet { fill: #fff; filter: drop-shadow(0 0 6px #ffb547) drop-shadow(0 0 14px #ffb547); opacity: 0; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .window {
+    position: relative; z-index: 2; margin: 0 auto; max-width: 1140px; border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--line-hi); background: #0f0d1a;
+    box-shadow: 0 60px 140px -50px #000, 0 40px 120px -60px #6200ee, 0 0 0 1px #00000080;
+  }
+  .window .bar { height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 14px; background: #141124; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+  .window .bar img { width: 16px; height: 16px; }
+  .window .bar .ctl { margin-left: auto; display: flex; gap: 18px; color: #6e678e; font-size: 13px; }
+  .orbit-front { z-index: 3; }
+  .sat {
+    position: absolute; z-index: 4; display: flex; align-items: center; gap: 10px; padding: 9px 14px 9px 10px;
+    background: rgba(23,19,41,.88); backdrop-filter: blur(10px); border: 1px solid var(--line-hi); border-radius: 12px;
+    font-size: .86rem; box-shadow: 0 18px 40px -18px #000;
+  }
+  .js .sat { opacity: 0; animation: pop .6s var(--ease) forwards, bob 6s ease-in-out infinite alternate; animation-delay: var(--d), calc(var(--d) + .6s); }
+  .sat b { display: block; font-weight: 600; color: #fff; line-height: 1.2; }
+  .sat span { color: var(--muted); font-family: var(--mono); font-size: .74rem; }
+  .sat .ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: #2b1466; color: var(--lavender); font-family: var(--mono); font-size: .78rem; font-weight: 700; position: relative; }
+  .sat .ico.amber { background: #3a2a10; color: var(--amber); }
+  .sat .ico::after { content: ""; position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; background: var(--green); border: 2px solid #171329; animation: ping 2.4s ease-out infinite; }
+  @keyframes ping { 0% { box-shadow: 0 0 0 0 #7ee08a99; } 70%, 100% { box-shadow: 0 0 0 8px #7ee08a00; } }
+  .sat-1 { left: -2%; top: 24%; --d: 2s; }
+  .sat-2 { right: 1%; top: -15%; --d: 2.3s; }
+  .sat-3 { right: 4%; bottom: 12%; --d: 2.6s; }
+  @keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.94); } to { opacity: 1; transform: none; } }
+  @keyframes bob { to { translate: 0 -8px; } }
+
+  /* ---------- Abschnitte ---------- */
+  section { padding: 104px 0; position: relative; }
+  h2 { font-size: clamp(2.1rem, 4.2vw, 3.4rem); letter-spacing: -.035em; line-height: 1.02; margin: 0 0 18px; font-weight: 800; font-variation-settings: "opsz" 72; text-wrap: balance; }
+  .intro { color: var(--muted); max-width: 36em; margin: 0 0 56px; font-size: 1.15rem; }
+  .head-row { display: grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 24px 56px; margin-bottom: 56px; }
+  .head-row h2, .head-row .intro { margin: 0; }
+
+  /* Einblenden beim Scrollen */
+  .js .reveal { opacity: 0; transform: translateY(32px); transition: opacity .9s var(--ease), transform .9s var(--ease); transition-delay: var(--d, 0s); }
+  .js .reveal.in { opacity: 1; transform: none; }
+
+  /* Karten mit Licht, das der Maus folgt */
+  .glow { position: relative; }
+  .glow::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .3s;
+    background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), #7a2bff2e, transparent 70%);
+  }
+  .glow:hover::before { opacity: 1; }
+
+  /* Geräte-Arten */
+  .kinds { padding-top: 132px; }
+  .kind-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .kind { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 14px; transition: border-color .25s, translate .35s var(--ease); }
+  .kind:hover { border-color: var(--line-hi); translate: 0 -4px; }
+  .kind-top { display: flex; align-items: center; gap: 12px; }
+  .kind .ico { width: 44px; height: 44px; border-radius: 11px; display: grid; place-items: center; background: #2b1466; color: var(--lavender); font-family: var(--mono); font-weight: 700; font-size: .95rem; flex: none; transition: transform .4s var(--ease); }
+  .kind:hover .ico { transform: rotate(-8deg) scale(1.08); }
+  .kind .ico.amber { background: #3a2a10; color: var(--amber); }
+  .kind .ico.green { background: #14301c; color: var(--green); }
+  .kind .ico.blue { background: #13284a; color: #8fc1ff; }
+  .kind h3 { margin: 0; font-size: 1.12rem; line-height: 1.2; }
+  .kind .addr { font-family: var(--mono); font-size: .76rem; color: var(--muted); }
+  .kind p { margin: 0; color: var(--muted); font-size: .96rem; }
+  .proto { margin-top: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .proto span { font-family: var(--mono); font-size: .72rem; padding: 3px 8px; border-radius: 6px; background: var(--panel-2); color: #d8d0f5; border: 1px solid var(--line); }
+
+  /* Rundgang */
+  .tour { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 52px; align-items: start; }
+  .tabs { display: flex; flex-direction: column; gap: 2px; }
+  .tab {
+    all: unset; box-sizing: border-box; cursor: pointer; display: block; padding: 14px 20px 14px 24px; border-radius: 14px; position: relative;
+    color: var(--muted); transition: background .25s, color .25s;
+  }
+  .tab::before, .tab .bar { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 3px; background: var(--line); }
+  .tab .bar { background: var(--amber); transform-origin: top; transform: scaleY(0); }
+  .tab:hover { color: var(--text); }
+  .tab h3 { margin: 0; font-size: 1.12rem; color: var(--text); letter-spacing: -.01em; font-weight: 600; }
+  .tab p { margin: 0; font-size: .95rem; display: grid; grid-template-rows: 0fr; transition: grid-template-rows .4s var(--ease), margin .4s var(--ease); }
+  .tab p > span { overflow: hidden; }
+  .tab[aria-selected="true"] { background: var(--panel); }
+  .tab[aria-selected="true"] .bar { transform: scaleY(1); }
+  .tab[aria-selected="true"] p { grid-template-rows: 1fr; margin-top: 6px; }
+  .tour.auto .tab[aria-selected="true"] .bar { animation: fill var(--dur, 7s) linear forwards; }
+  .tour.auto.hold .tab[aria-selected="true"] .bar { animation-play-state: paused; }
+  @keyframes fill { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+  .tab:focus-visible { outline-offset: 0; }
+  .tour-stage { position: sticky; top: 96px; display: grid; }
+  .tour-stage .window { max-width: none; }
+  .panel { grid-area: 1 / 1; }
+  .panel[hidden] { display: none; }
+  .panel:not([hidden]) .window { animation: swap .6s var(--ease); }
+  @keyframes swap { from { opacity: 0; transform: translateY(14px) scale(.985); filter: blur(6px); } }
+  .panel .desc { display: none; color: var(--muted); margin: 18px 0 0; }
+
+  /* Changelog im Terminal */
+  .new { background: linear-gradient(180deg, transparent, #2b146633 30%, #2b146633 70%, transparent); }
+  .term { border-radius: 16px; border: 1px solid var(--line-hi); background: #0b0916; overflow: hidden; box-shadow: 0 40px 100px -50px #6200ee; }
+  .term .tbar { height: 38px; display: flex; align-items: center; padding: 0 16px; gap: 10px; background: #141124; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: .78rem; color: var(--muted); }
+  .term .tbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: ping 2.4s ease-out infinite; }
+  .term .body { margin: 0; padding: 28px 30px 32px; font-family: var(--mono); font-size: .92rem; line-height: 1.85; color: #d8d0f5; }
+  .term .line { white-space: pre-wrap; }
+  .term .p { color: var(--green); }
+  .term .c { color: #fff; }
+  .term .m { color: #786f9c; }
+  .log { display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; margin: 10px 0 14px; padding: 0; list-style: none; }
+  .log li { display: grid; grid-template-columns: 1.4em 1fr; padding: 3px 0; }
+  .log li::before { content: "+"; color: var(--green); }
+  .log b { color: #fff; font-weight: 500; }
+  .log span span { color: var(--muted); }
+  .js .term.typing .log li, .js .term.typing .later { opacity: 0; transform: translateX(-8px); }
+  .js .term .log li, .js .term .later { transition: opacity .35s, transform .35s var(--ease); }
+  .js .term .log li.on, .js .term .later.on { opacity: 1; transform: none; }
+  .blink { display: inline-block; width: .6em; height: 1.1em; vertical-align: text-bottom; background: var(--amber); animation: blink 1.1s steps(1) infinite; }
+
+  /* Sicherheit */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 56px; }
+  .grid > div { padding: 26px 0; border-top: 1px solid var(--line); position: relative; }
+  .grid > div::after { content: ""; position: absolute; left: 0; top: -1px; height: 1px; width: 100%; background: linear-gradient(90deg, var(--amber), var(--violet) 60%, transparent); transform-origin: left; transform: scaleX(0); transition: transform 1.1s var(--ease); transition-delay: var(--d, 0s); }
+  .grid > div.in::after { transform: scaleX(1); }
+  .grid h3 { margin: 0 0 6px; font-size: 1.1rem; font-weight: 600; }
+  .grid p { margin: 0; color: var(--muted); font-size: .97rem; }
+
+  /* Nativ */
+  .native { display: grid; grid-template-columns: 1fr 1.1fr; gap: 72px; align-items: center; }
+  .bars { display: flex; flex-direction: column; gap: 30px; }
+  .bars h3 { margin: 0 0 12px; font-size: 1rem; font-weight: 500; color: var(--muted); }
+  .bar-row { display: grid; grid-template-columns: 110px 1fr 76px; align-items: center; gap: 14px; font-size: .9rem; margin-bottom: 8px; }
+  .bar-row .who { color: var(--muted); }
+  .bar-row .track { height: 12px; border-radius: 6px; background: var(--panel); overflow: hidden; }
+  .bar-row .fill { display: block; height: 100%; width: var(--w); border-radius: 6px; background: #4a4466; transition: width 1.6s var(--ease); }
+  .js .bars:not(.in) .fill { width: 0; }
+  .bar-row.us .fill { background: linear-gradient(90deg, var(--violet), var(--lavender)); transition-delay: .25s; }
+  .bar-row.us .who, .bar-row.us .val { color: #fff; font-weight: 600; }
+  .bar-row .val { font-family: var(--mono); font-size: .82rem; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; margin-top: 8px; }
+  .facts div { padding: 14px 0; border-top: 1px solid var(--line); }
+  .facts b { display: block; font-size: 1.3rem; letter-spacing: -.01em; }
+  .facts span { color: var(--muted); font-size: .9rem; }
+  .bars-cap { color: var(--muted); font-size: .85rem; margin: 0; }
+
+  /* Download */
+  .download { text-align: center; overflow: hidden; }
+  .download::before { content: ""; position: absolute; left: 50%; bottom: -380px; width: 1100px; height: 700px; transform: translateX(-50%); background: radial-gradient(closest-side, #6200ee55, transparent); pointer-events: none; z-index: -1; animation: breathe 6s ease-in-out infinite alternate; }
+  @keyframes breathe { to { opacity: .55; transform: translateX(-50%) scale(1.08); } }
+  .logo-wrap { width: 112px; height: 112px; margin: 0 auto 28px; position: relative; }
+  .logo-wrap img { width: 112px; height: 112px; filter: drop-shadow(0 24px 50px #6200ee88); animation: float 5s ease-in-out infinite alternate; }
+  .logo-wrap::before { content: ""; position: absolute; inset: -26px; border-radius: 50%; border: 1px dashed #c6b6ff40; animation: spin 40s linear infinite; }
+  @keyframes float { to { translate: 0 -8px; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .download .intro { margin-left: auto; margin-right: auto; }
+  .dl-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; max-width: 860px; margin: 0 auto; text-align: left; }
+  .dl { border: 1px solid var(--line); border-radius: 18px; padding: 28px; display: flex; flex-direction: column; gap: 8px; background: var(--panel); transition: translate .35s var(--ease), border-color .25s; }
+  .dl:hover { translate: 0 -4px; border-color: var(--line-hi); }
+  .dl.main { background: linear-gradient(155deg, #6200ee38, transparent 60%), var(--panel); border-color: #6200eeaa; }
+  .dl h3 { margin: 0; font-size: 1.35rem; }
+  .dl p { margin: 0 0 14px; color: var(--muted); font-size: .97rem; flex: 1; }
+  .dl .size { font-family: var(--mono); font-size: .76rem; color: var(--muted); margin-bottom: 6px; }
+  .dl .btn { justify-content: center; }
+  .steps { list-style: none; counter-reset: s; display: flex; justify-content: center; flex-wrap: wrap; gap: 14px 40px; margin: 44px auto 0; padding: 0; max-width: 980px; }
+  .steps li { counter-increment: s; color: var(--muted); font-size: .97rem; display: flex; align-items: center; gap: 10px; }
+  .steps li::before { content: counter(s); display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--panel-2); color: var(--amber); font-weight: 700; font-size: .82rem; flex: none; }
+  .req { margin-top: 30px; color: var(--muted); font-size: .92rem; }
+
+  footer { border-top: 1px solid var(--line); padding: 36px 0 48px; color: var(--muted); font-size: .9rem; }
+  footer .wrap { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer .brand { font-size: 1rem; }
+  footer .brand img { width: 24px; height: 24px; }
+
+  /* ---------- Responsiv ---------- */
+  @media (max-width: 1080px) {
+    .kind-row { grid-template-columns: 1fr 1fr; }
+    .tour { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+    .tour-stage { position: static; order: -1; }
+    .tabs { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { flex: none; padding: 10px 16px 12px; }
+    .tab::before { display: none; }
+    .tab .bar { left: 12px; right: 12px; top: auto; bottom: 4px; width: auto; height: 2px; transform-origin: left; transform: scaleX(0); }
+    .tab[aria-selected="true"] .bar { transform: scaleX(1); }
+    @keyframes fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    .tab h3 { font-size: .98rem; }
+    .tab p { display: none; }
+    .tab[aria-selected="true"] { background: var(--panel-2); }
+    .panel .desc { display: block; }
+    .native { grid-template-columns: 1fr; gap: 48px; }
+    .sat-1 { left: 1%; }
+    .sat-2 { right: 1%; }
+  }
+  @media (max-width: 760px) {
+    .wrap { padding: 0 16px; }
+    nav.top a:not(.cta):not(.lang) { display: none; }
+    section { padding: 84px 0; }
+    .hero { padding-top: 44px; }
+    .lead { font-size: 1.1rem; }
+    .stage { margin-top: 44px; }
+    .window .bar { display: none; }
+    .sat { display: none; }
+    .orbit { width: 120%; }
+    .kind-row, .grid, .log, .facts, .dl-row, .head-row { grid-template-columns: 1fr; }
+    .term .body { padding: 20px 18px 24px; font-size: .82rem; }
+    .bar-row { grid-template-columns: 84px 1fr 66px; }
+    .steps { flex-direction: column; align-items: flex-start; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .js .w, .js .fade, .js .tilt, .js .sat, .js .reveal { opacity: 1; transform: none; filter: none; }
+    .orbit .draw { stroke-dashoffset: 0; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top" id="top">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="../icon.png" alt=""><strong>Nebula<span>SSH</span></strong></a>
+    <nav class="top" aria-label="Main navigation">
+      <a href="#features">Features</a>
+      <a href="#new">New in 2.3</a>
+      <a href="#compare">Compare</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/Zenutrix/NebulaSSH">GitHub</a>
+      <a class="lang" href="../" hreflang="de" lang="de" title="Deutsche Version">DE</a>
+      <a class="cta" href="#download">Download</a>
+    </nav>
+  </div>
+  <div class="progress" aria-hidden="true"></div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="stars" aria-hidden="true">
+      <i style="left:8%;top:14%"></i><i class="a" style="left:46%;top:9%"></i><i style="left:62%;top:22%"></i>
+      <i class="b" style="left:88%;top:16%"></i><i style="left:30%;top:36%"></i><i style="left:94%;top:44%"></i>
+      <i class="a" style="left:4%;top:52%"></i><i style="left:54%;top:4%"></i><i style="left:76%;top:8%"></i>
+      <i style="left:70%;top:38%"></i><i style="left:18%;top:28%"></i>
+    </div>
+    <div class="wrap">
+      <div class="hero-text">
+        <h1><span class="w" style="--d:.05s">Every</span> <span class="w" style="--d:.15s">console.</span><span class="l2"><span class="w" style="--d:.3s">One</span> <span class="w" style="--d:.42s">window.<span class="cursor" aria-hidden="true"></span></span></span></h1>
+        <p class="lead fade" style="--d:.55s">NebulaSSH connects you to <strong>servers, switches and serial consoles</strong> over SSH, SFTP, Telnet or COM port. A native Windows client written entirely in Rust, with no browser running underneath.</p>
+        <div class="cta-row fade" style="--d:.7s">
+          <a class="btn btn-primary" href="https://github.com/Zenutrix/NebulaSSH/releases/latest/download/NebulaSSH-Setup.exe" data-asset="NebulaSSH-Setup.exe">Install NebulaSSH <small data-size="NebulaSSH-Setup.exe">4.6 MB</small></a>
+          <a class="btn btn-ghost" href="https://github.com/Zenutrix/NebulaSSH"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg> Source on GitHub</a>
+        </div>
+        <p class="meta fade" style="--d:.8s">Version <span data-gh-version>2.3.2</span> · Windows 10 and 11 (64-bit) · free · by Thomas Schöpf</p>
+      </div>
+
+      <div class="stage">
+        <div class="tilt" id="tilt">
+          <svg class="orbit" viewBox="0 0 1400 700" aria-hidden="true">
+            <defs>
+              <linearGradient id="ring" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#ffb547" stop-opacity="0"/>
+                <stop offset=".25" stop-color="#ffb547"/>
+                <stop offset=".6" stop-color="#e9ddff"/>
+                <stop offset="1" stop-color="#9a6bff" stop-opacity=".2"/>
+              </linearGradient>
+            </defs>
+            <g transform="rotate(-17 700 350)">
+              <path class="draw back" pathLength="1" stroke="url(#ring)" d="M 60 350 A 640 250 0 0 1 1340 350"/>
+            </g>
+          </svg>
+          <figure class="window">
+            <div class="bar" aria-hidden="true"><img src="../icon.png" alt="">web-prod-01 – NebulaSSH<span class="ctl"><span>—</span><span>▢</span><span>✕</span></span></div>
+            <img src="../screenshots/main.png" width="1384" height="861" alt="NebulaSSH with an SSH session, the SFTP browser, an open tunnel and server load in the status bar" fetchpriority="high">
+          </figure>
+          <svg class="orbit orbit-front" viewBox="0 0 1400 700" aria-hidden="true">
+            <g transform="rotate(-17 700 350)">
+              <path id="front-arc" class="draw" pathLength="1" stroke="url(#ring)" d="M 1340 350 A 640 250 0 0 1 60 350" style="animation-delay:1.7s"/>
+              <circle class="comet" r="5"/>
+            </g>
+          </svg>
+          <div class="sat sat-1" aria-hidden="true"><div class="ico">&gt;_</div><div><b>edge-router</b><span>SSH · 10.0.0.1</span></div></div>
+          <div class="sat sat-2" aria-hidden="true"><div class="ico amber">⏻</div><div><b>Console rack 3</b><span>COM4 · 9600 baud</span></div></div>
+          <div class="sat sat-3" aria-hidden="true"><div class="ico">⇄</div><div><b>Tunnel open</b><span>-L 15432 → db-prod-01:5432</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="kinds" aria-labelledby="kinds-h">
+    <div class="wrap">
+      <div class="head-row">
+        <h2 id="kinds-h" class="reveal">From the data centre<br>to the server rack</h2>
+        <p class="intro reveal" style="--d:.1s">Anything with a console lands in the same device list, with groups, favourites and a dot that shows whether it is reachable right now.</p>
+      </div>
+      <div class="kind-row">
+        <article class="kind glow reveal" style="--d:0s">
+          <div class="kind-top"><div class="ico">&gt;_</div><div><h3>Linux servers</h3><div class="addr">deploy@web-prod-01</div></div></div>
+          <p>Terminal, SFTP browser and editor side by side. CPU, RAM and disk usage sit in the status bar.</p>
+          <div class="proto"><span>SSH</span><span>SFTP</span><span>X11</span></div>
+        </article>
+        <article class="kind glow reveal" style="--d:.08s">
+          <div class="kind-top"><div class="ico blue">⇆</div><div><h3>Behind the bastion</h3><div class="addr">db-prod-01 via jump</div></div></div>
+          <p>Reach the internal network through a jump host, and databases and web consoles through tunnels.</p>
+          <div class="proto"><span>-L</span><span>-R</span><span>-D</span><span>Agent</span></div>
+        </article>
+        <article class="kind glow reveal" style="--d:.16s">
+          <div class="kind-top"><div class="ico green">⌗</div><div><h3>Switches &amp; routers</h3><div class="addr">admin@10.0.0.2</div></div></div>
+          <p>Keyboard-interactive login, legacy algorithms as a fallback, and Telnet for devices that speak nothing else.</p>
+          <div class="proto"><span>SSH</span><span>Telnet</span></div>
+        </article>
+        <article class="kind glow reveal" style="--d:.24s">
+          <div class="kind-top"><div class="ico amber">⏻</div><div><h3>Serial console</h3><div class="addr">COM4 · 9600 baud</div></div></div>
+          <p>Plug in the USB console cable, pick the port and baud rate, done – with custom profiles per device.</p>
+          <div class="proto"><span>COM</span><span>RS-232</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" aria-labelledby="tour-h">
+    <div class="wrap">
+      <h2 id="tour-h" class="reveal">A tour of the app</h2>
+      <p class="intro reveal" style="--d:.1s">Real screenshots of version 2.3, taken against two test servers – nothing mocked up. The app is shown in German; switch it to English in the settings.</p>
+      <div class="tour reveal" id="tour" style="--d:.15s">
+        <div class="tabs" role="tablist" aria-label="Areas of the app">
+          <button class="tab" role="tab" id="t-tunnel" aria-controls="p-tunnel" aria-selected="true"><span class="bar"></span><h3>Tunnels &amp; jump hosts</h3><p><span>Local, remote or SOCKS port forwarding – saved per device or opened during a session.</span></p></button>
+          <button class="tab" role="tab" id="t-split" aria-controls="p-split" aria-selected="false" tabindex="-1"><span class="bar"></span><h3>Split view</h3><p><span>Up to four terminals side by side. Drag a tab out of the bar into its own window.</span></p></button>
+          <button class="tab" role="tab" id="t-files" aria-controls="p-files" aria-selected="false" tabindex="-1"><span class="bar"></span><h3>Files &amp; editor</h3><p><span>Double-click opens a file in the editor, <kbd>Ctrl</kbd>+<kbd>S</kbd> saves it back to the server.</span></p></button>
+          <button class="tab" role="tab" id="t-sync" aria-controls="p-sync" aria-selected="false" tabindex="-1"><span class="bar"></span><h3>Folder sync</h3><p><span>Compare a local folder with the server and transfer only new and changed files. Nothing gets deleted.</span></p></button>
+          <button class="tab" role="tab" id="t-snip" aria-controls="p-snip" aria-selected="false" tabindex="-1"><span class="bar"></span><h3>Snippets</h3><p><span>Frequent commands with placeholders like <code>{{service}}</code>, sorted into groups and searchable.</span></p></button>
+          <button class="tab" role="tab" id="t-devices" aria-controls="p-devices" aria-selected="false" tabindex="-1"><span class="bar"></span><h3>Devices in order</h3><p><span>Groups, favourites, recently used – and a dot shows what is reachable. Import from PuTTY and MobaXterm.</span></p></button>
+          <button class="tab" role="tab" id="t-keys" aria-controls="p-keys" aria-selected="false" tabindex="-1"><span class="bar"></span><h3>SSH keys</h3><p><span>Generate Ed25519, RSA or ECDSA keys and install them on the connected server in one click.</span></p></button>
+          <button class="tab" role="tab" id="t-settings" aria-controls="p-settings" aria-selected="false" tabindex="-1"><span class="bar"></span><h3>Settings</h3><p><span>Colour scheme, font, cursor, language and behaviour – with a live preview.</span></p></button>
+        </div>
+        <div class="tour-stage">
+          <figure class="panel" role="tabpanel" id="p-tunnel" aria-labelledby="t-tunnel">
+            <div class="window"><img src="../screenshots/tunnels.png" width="1384" height="861" alt="Tunnel dialog with two local forwards and a SOCKS proxy" loading="lazy"></div>
+            <p class="desc">Local, remote or SOCKS port forwarding – saved per device or opened during a session.</p>
+          </figure>
+          <figure class="panel" role="tabpanel" id="p-split" aria-labelledby="t-split" hidden>
+            <div class="window"><img src="../screenshots/split.png" width="1384" height="861" alt="Two SSH sessions side by side with server load and three open tunnels below" loading="lazy"></div>
+            <p class="desc">Up to four terminals side by side. Drag a tab out of the bar into its own window.</p>
+          </figure>
+          <figure class="panel" role="tabpanel" id="p-files" aria-labelledby="t-files" hidden>
+            <div class="window"><img src="../screenshots/editor.png" width="1384" height="861" alt="Built-in editor with an nginx configuration from the server" loading="lazy"></div>
+            <p class="desc">Double-click opens a file in the editor, Ctrl+S saves it back to the server.</p>
+          </figure>
+          <figure class="panel" role="tabpanel" id="p-sync" aria-labelledby="t-sync" hidden>
+            <div class="window"><img src="../screenshots/sync.png" width="1384" height="861" alt="Folder comparison between a local folder and the server showing five new or changed files" loading="lazy"></div>
+            <p class="desc">Compare a local folder with the server and transfer only new and changed files. Nothing gets deleted.</p>
+          </figure>
+          <figure class="panel" role="tabpanel" id="p-snip" aria-labelledby="t-snip" hidden>
+            <div class="window"><img src="../screenshots/snippets.png" width="1384" height="861" alt="Snippet library with commands in the groups Docker, network and system" loading="lazy"></div>
+            <p class="desc">Frequent commands with placeholders, sorted into groups and searchable.</p>
+          </figure>
+          <figure class="panel" role="tabpanel" id="p-devices" aria-labelledby="t-devices" hidden>
+            <div class="window"><img src="../screenshots/start.png" width="1384" height="861" alt="Start page with recently used devices and the grouped device list with reachability" loading="lazy"></div>
+            <p class="desc">Groups, favourites, recently used – and a dot shows what is reachable.</p>
+          </figure>
+          <figure class="panel" role="tabpanel" id="p-keys" aria-labelledby="t-keys" hidden>
+            <div class="window"><img src="../screenshots/keygen.png" width="1384" height="861" alt="Freshly generated Ed25519 key with its public key and instructions for the Linux server" loading="lazy"></div>
+            <p class="desc">Generate Ed25519, RSA or ECDSA keys and install them on the connected server in one click.</p>
+          </figure>
+          <figure class="panel" role="tabpanel" id="p-settings" aria-labelledby="t-settings" hidden>
+            <div class="window"><img src="../screenshots/settings.png" width="1384" height="861" alt="Settings with language, font size, colour scheme and cursor" loading="lazy"></div>
+            <p class="desc">Colour scheme, font, cursor, language and behaviour – with a live preview.</p>
+          </figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="new" class="new" aria-labelledby="new-h">
+    <div class="wrap">
+      <div class="head-row">
+        <h2 id="new-h" class="reveal">New in version 2.3</h2>
+        <p class="intro reveal" style="--d:.1s">The biggest update since the move to Rust. Existing installations are offered it on their next start.</p>
+      </div>
+      <div class="term reveal" id="term">
+        <div class="tbar"><span class="dot"></span>PowerShell</div>
+        <div class="body">
+          <div class="line"><span class="p">PS C:\&gt;</span> <span class="c" id="cmd" data-text="# What's new in NebulaSSH 2.3?"># What's new in NebulaSSH 2.3?</span></div>
+          <div class="line m later">12 new features</div>
+          <ul class="log">
+            <li><span><b>Port forwarding</b> <span>-L, -R and SOCKS (-D), per device</span></span></li>
+            <li><span><b>Jump host</b> <span>through the bastion into the internal network</span></span></li>
+            <li><span><b>SSH agent</b> <span>Pageant, OpenSSH, 1Password, KeePassXC</span></span></li>
+            <li><span><b>Import</b> <span>PuTTY, MobaXterm, ~/.ssh/config</span></span></li>
+            <li><span><b>Split view</b> <span>up to four terminals side by side</span></span></li>
+            <li><span><b>Own windows</b> <span>drag a tab out of the bar</span></span></li>
+            <li><span><b>Snippets</b> <span>with placeholders and search</span></span></li>
+            <li><span><b>SFTP sync</b> <span>compare, pause, resume</span></span></li>
+            <li><span><b>Server load</b> <span>CPU, RAM, disk in the status bar</span></span></li>
+            <li><span><b>Network tools</b> <span>ping, port check, Wake-on-LAN</span></span></li>
+            <li><span><b>Telnet &amp; X11</b> <span>for old switches and Linux GUIs</span></span></li>
+            <li><span><b>English</b> <span>follows the Windows display language</span></span></li>
+          </ul>
+          <div class="line later"><span class="p">PS C:\&gt;</span> <span class="blink" aria-hidden="true"></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="sec-h">
+    <div class="wrap">
+      <h2 id="sec-h" class="reveal">Secure without thinking about it</h2>
+      <p class="intro reveal" style="--d:.1s">The things you only miss once they are gone.</p>
+      <div class="grid">
+        <div class="reveal" style="--d:0s"><h3>Host key checks</h3><p>New servers show their fingerprint for you to confirm. If it changes later, NebulaSSH warns you before any password is sent.</p></div>
+        <div class="reveal" style="--d:.07s"><h3>Encrypted storage</h3><p>Devices and keys are stored AES-256 encrypted on disk; the key lives in the Windows Credential Manager.</p></div>
+        <div class="reveal" style="--d:.14s"><h3>App lock</h3><p>Optional start-up password (Argon2id) and automatic lock after inactivity – handy on shared PCs.</p></div>
+        <div class="reveal" style="--d:0s"><h3>Signed updates</h3><p>New versions are detected at start-up and only installed if signature and checksum match.</p></div>
+        <div class="reveal" style="--d:.07s"><h3>Backup &amp; migration</h3><p>Export everything to a password-protected <code>.nebula</code> file and restore it on your new PC.</p></div>
+        <div class="reveal" style="--d:.14s"><h3>Clipboard</h3><p>Copied passwords are cleared from the clipboard automatically after 30 seconds.</p></div>
+        <div class="reveal" style="--d:0s"><h3>Broadcast</h3><p>Send one command to all connected tabs at once – for several switches in one go.</p></div>
+        <div class="reveal" style="--d:.07s"><h3>Old hardware too</h3><p>Modern ciphers first, legacy algorithms as a fallback you can switch off.</p></div>
+        <div class="reveal" style="--d:.14s"><h3>Search the scrollback</h3><p><kbd>Ctrl</kbd>+<kbd>F</kbd> searches the output. Selecting copies, right-click pastes.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="nat-h">
+    <div class="wrap native">
+      <div class="reveal">
+        <h2 id="nat-h">One process instead of seven</h2>
+        <p class="intro" style="margin-bottom:22px">Version 1 ran on Go with an embedded browser interface. Since 2.1, NebulaSSH is written entirely in Rust: terminal, interface and SSH run in a single, lean process.</p>
+        <p style="color:var(--muted);margin:0">Your devices from version 1 carry over – the encrypted files are compatible.</p>
+      </div>
+      <div class="bars reveal" id="bars" style="--d:.1s">
+        <div>
+          <h3>Memory when idle</h3>
+          <div class="bar-row"><span class="who">with WebView</span><span class="track"><span class="fill" style="--w:100%"></span></span><span class="val" data-count="339" data-unit=" MB">339 MB</span></div>
+          <div class="bar-row us"><span class="who">2.3 native</span><span class="track"><span class="fill" style="--w:44.5%"></span></span><span class="val" data-count="151" data-unit=" MB">151 MB</span></div>
+        </div>
+        <div>
+          <h3>Processes</h3>
+          <div class="bar-row"><span class="who">with WebView</span><span class="track"><span class="fill" style="--w:100%"></span></span><span class="val" data-count="7">7</span></div>
+          <div class="bar-row us"><span class="who">2.3 native</span><span class="track"><span class="fill" style="--w:14.3%"></span></span><span class="val" data-count="1">1</span></div>
+        </div>
+        <div class="facts">
+          <div><b data-size="NebulaSSH-Setup.exe">4.6 MB</b><span>installer</span></div>
+          <div><b>43 MB/s</b><span>terminal throughput</span></div>
+          <div><b>no WebView2</b><span>nothing else to install</span></div>
+          <div><b>signed</b><span>automatic updates</span></div>
+        </div>
+        <p class="bars-cap">Measured on the same Windows 11 PC.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="compare" class="compare" aria-labelledby="cmp-h">
+    <div class="wrap">
+      <h2 id="cmp-h" class="reveal">The alternative to PuTTY and MobaXterm</h2>
+      <p class="intro reveal" style="--d:.1s">PuTTY, WinSCP and MobaXterm each cover part of the job. NebulaSSH brings terminal, files, tunnels and serial console together in one free app – and imports your existing sessions.</p>
+      <div class="cmp-scroll reveal" style="--d:.15s">
+        <table class="cmp">
+          <caption>Feature comparison of Windows SSH clients (as of November 2026)</caption>
+          <thead>
+            <tr><th scope="col">Feature</th><th scope="col" class="us">NebulaSSH</th><th scope="col">PuTTY</th><th scope="col">MobaXterm</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">SSH terminal with tabs</th><td class="us"><span class="y" aria-label="yes">✓</span></td><td><span class="n" aria-label="no">–</span></td><td><span class="y" aria-label="yes">✓</span></td></tr>
+            <tr><th scope="row">SFTP browser with editor</th><td class="us"><span class="y" aria-label="yes">✓</span></td><td>psftp only (command line)</td><td><span class="y" aria-label="yes">✓</span></td></tr>
+            <tr><th scope="row">Sync local folders with the server</th><td class="us"><span class="y" aria-label="yes">✓</span></td><td><span class="n" aria-label="no">–</span></td><td><span class="n" aria-label="no">–</span></td></tr>
+            <tr><th scope="row">Save tunnels (-L, -R, SOCKS) per device</th><td class="us"><span class="y" aria-label="yes">✓</span></td><td><span class="y" aria-label="yes">✓</span></td><td><span class="y" aria-label="yes">✓</span></td></tr>
+            <tr><th scope="row">Jump host (ProxyJump)</th><td class="us"><span class="y" aria-label="yes">✓</span></td><td><span class="n" aria-label="no">–</span></td><td><span class="y" aria-label="yes">✓</span></td></tr>
+            <tr><th scope="row">Telnet and serial console</th><td class="us"><span class="y" aria-label="yes">✓</span></td><td><span class="y" aria-label="yes">✓</span></td><td><span class="y" aria-label="yes">✓</span></td></tr>
+            <tr><th scope="row">Up to four terminals side by side</th><td class="us"><span class="y" aria-label="yes">✓</span></td><td><span class="n" aria-label="no">–</span></td><td><span class="y" aria-label="yes">✓</span></td></tr>
+            <tr><th scope="row">Import from PuTTY and MobaXterm</th><td class="us"><span class="y" aria-label="yes">✓</span></td><td><span class="n" aria-label="no">–</span></td><td>PuTTY only</td></tr>
+            <tr><th scope="row">No limit on sessions or tunnels</th><td class="us"><span class="y" aria-label="yes">✓</span></td><td><span class="y" aria-label="yes">✓</span></td><td>Home Edition limited</td></tr>
+            <tr><th scope="row">Encrypted storage with app lock</th><td class="us"><span class="y" aria-label="yes">✓</span></td><td><span class="n" aria-label="no">–</span></td><td><span class="y" aria-label="yes">✓</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="cmp-note reveal">File transfer like WinSCP is built in: upload, download, edit straight on the server and sync folders.</p>
+    </div>
+  </section>
+
+  <section id="faq" class="faq" aria-labelledby="faq-h">
+    <div class="wrap faq-wrap">
+      <div>
+        <h2 id="faq-h" class="reveal">Frequently asked questions</h2>
+        <p class="intro reveal" style="--d:.1s">What people switching from PuTTY, MobaXterm and WinSCP want to know first.</p>
+      </div>
+      <div class="faq-list">
+        <details class="reveal" style="--d:0.00s">
+          <summary><h3>Is NebulaSSH a good PuTTY alternative?</h3></summary>
+          <p>Yes. NebulaSSH imports your saved PuTTY sessions and adds what PuTTY is missing: tabs, an SFTP file browser with a built-in editor, saved tunnels, jump hosts, snippets and a split view with up to four terminals. Telnet and serial consoles work just like in PuTTY.</p>
+        </details>
+        <details class="reveal" style="--d:0.04s">
+          <summary><h3>How is NebulaSSH different from MobaXterm?</h3></summary>
+          <p>NebulaSSH focuses on SSH, SFTP, Telnet and serial consoles and is free without limits: there is no cap on sessions or tunnels. It is written in Rust and uses around 150 MB of RAM when idle. MobaXterm sessions can be imported directly.</p>
+        </details>
+        <details class="reveal" style="--d:0.08s">
+          <summary><h3>Is NebulaSSH free?</h3></summary>
+          <p>Yes. NebulaSSH is completely free, with no account, no ads and no paid edition. The source code is on GitHub.</p>
+        </details>
+        <details class="reveal" style="--d:0.12s">
+          <summary><h3>Is NebulaSSH a web-based SSH client?</h3></summary>
+          <p>No. NebulaSSH is a native Windows desktop app that runs on your own PC. There is no cloud service and no account: devices, passwords and keys stay on your computer, encrypted with AES-256.</p>
+        </details>
+        <details class="reveal" style="--d:0.16s">
+          <summary><h3>Can I import my sessions from PuTTY, MobaXterm or ~/.ssh/config?</h3></summary>
+          <p>Yes. The importer reads saved sessions from PuTTY, MobaXterm and the OpenSSH config file <code>~/.ssh/config</code> and adds them as devices in NebulaSSH.</p>
+        </details>
+        <details class="reveal" style="--d:0.20s">
+          <summary><h3>Is there a portable version that needs no installation?</h3></summary>
+          <p>Yes. <code>NebulaSSH-portable.exe</code> is a single file for a USB stick. Devices and settings are stored in the same folder as the EXE.</p>
+        </details>
+        <details class="reveal" style="--d:0.24s">
+          <summary><h3>Which versions of Windows are supported?</h3></summary>
+          <p>Windows 10 and Windows 11, 64-bit. No WebView2, .NET or other runtime is required.</p>
+        </details>
+        <details class="reveal" style="--d:0.28s">
+          <summary><h3>Can NebulaSSH transfer files like WinSCP?</h3></summary>
+          <p>Yes. The built-in SFTP browser uploads and downloads files and folders, opens files in the editor and saves them straight back to the server with <kbd>Ctrl</kbd>+<kbd>S</kbd>. Local folders can be compared and synced with the server.</p>
+        </details>
+        <details class="reveal" style="--d:0.32s">
+          <summary><h3>Does NebulaSSH work with switches, routers and serial consoles?</h3></summary>
+          <p>Yes. Besides SSH, NebulaSSH supports Telnet for older network gear and serial connections over COM ports with any baud rate. Broadcast sends one command to all open tabs at once.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section id="download" class="download" aria-labelledby="dl-h">
+    <div class="wrap">
+      <div class="logo-wrap reveal"><img src="../logo.png" width="112" height="112" alt=""></div>
+      <h2 id="dl-h" class="reveal" style="--d:.08s">Ready for your first connection?</h2>
+      <p class="intro reveal" style="--d:.14s">All downloads come straight from the <a href="https://github.com/Zenutrix/NebulaSSH/releases/latest">GitHub releases</a> and are always the latest version<span data-gh-release></span>.</p>
+      <div class="dl-row">
+        <div class="dl main glow reveal" style="--d:.1s">
+          <h3>Installer</h3>
+          <p>Recommended. Installs to <code>C:\Program Files\NebulaSSH</code> with a Start menu entry and uninstall via “Apps &amp; features”.</p>
+          <span class="size">NebulaSSH-Setup.exe · <span data-size="NebulaSSH-Setup.exe">4.6 MB</span></span>
+          <a class="btn btn-primary" href="https://github.com/Zenutrix/NebulaSSH/releases/latest/download/NebulaSSH-Setup.exe" data-asset="NebulaSSH-Setup.exe">Download installer</a>
+        </div>
+        <div class="dl glow reveal" style="--d:.18s">
+          <h3>Portable</h3>
+          <p>A single EXE for your USB stick. Devices and settings are stored in the same folder.</p>
+          <span class="size">NebulaSSH-portable.exe · <span data-size="NebulaSSH-portable.exe">12.9 MB</span></span>
+          <a class="btn btn-ghost" href="https://github.com/Zenutrix/NebulaSSH/releases/latest/download/NebulaSSH-portable.exe" data-asset="NebulaSSH-portable.exe">Download portable</a>
+        </div>
+      </div>
+      <ol class="steps reveal" style="--d:.2s">
+        <li>Run the installer and accept the Windows prompt</li>
+        <li>Enter a connection on the left and save it</li>
+        <li>Or import your existing sessions from PuTTY</li>
+      </ol>
+      <p class="req">Windows 10 or 11, 64-bit · <a href="https://github.com/Zenutrix/NebulaSSH/releases">All versions &amp; changes</a> · <a href="https://github.com/Zenutrix/NebulaSSH/releases/latest/download/SHA256SUMS.txt" data-asset="SHA256SUMS.txt">Checksums</a></p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="#"><img src="../icon.png" alt=""><strong>Nebula<span>SSH</span></strong></a>
+    <span>© 2026 Thomas Schöpf · <a href="https://github.com/Zenutrix/NebulaSSH">GitHub</a> · <a href="https://github.com/Zenutrix/NebulaSSH/releases">All versions</a> · <a href="../" hreflang="de" lang="de">Deutsch</a></span>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const hdr = document.getElementById('top');
+  const bar = hdr.querySelector('.progress');
+  const tilt = document.getElementById('tilt');
+
+  // Kopfzeile, Lesefortschritt und Hero-Fenster, das beim Scrollen flach kippt
+  let ticking = false;
+  function onScroll() {
+    const y = scrollY;
+    hdr.classList.toggle('scrolled', y > 8);
+    const max = document.documentElement.scrollHeight - innerHeight;
+    bar.style.setProperty('--p', max > 0 ? (y / max).toFixed(4) : 0);
+    if (!still) {
+      const t = Math.min(1, y / 520);
+      tilt.style.setProperty('--rx', (14 * (1 - t)).toFixed(2) + 'deg');
+      tilt.style.setProperty('--sc', (0.94 + 0.06 * t).toFixed(4));
+    }
+    ticking = false;
+  }
+  addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
+  onScroll();
+
+  // Komet, der nach dem Zeichnen einmal den vorderen Bogen entlangläuft
+  const arc = document.getElementById('front-arc');
+  const comet = document.querySelector('.comet');
+  if (!still && arc && comet) {
+    const len = arc.getTotalLength();
+    let start = null;
+    const run = ts => {
+      if (start === null) start = ts;
+      const k = Math.min(1, (ts - start) / 3800);
+      const e = 1 - Math.pow(1 - k, 3);
+      const p = arc.getPointAtLength(e * len);
+      comet.setAttribute('cx', p.x); comet.setAttribute('cy', p.y);
+      comet.style.opacity = k < .08 ? k / .08 : k > .85 ? (1 - k) / .15 : 1;
+      if (k < 1) requestAnimationFrame(run);
+      else setTimeout(() => { start = null; requestAnimationFrame(run); }, 6000);
+    };
+    setTimeout(() => requestAnimationFrame(run), 3600);
+  }
+
+  // Einblenden beim Scrollen
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      e.target.classList.add('in');
+      io.unobserve(e.target);
+      if (e.target.id === 'term') typeTerm();
+      if (e.target.id === 'bars') countUp();
+    }
+  }, { threshold: .18, rootMargin: '0px 0px -8% 0px' });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  // Licht folgt der Maus auf Karten
+  document.querySelectorAll('.glow').forEach(el => el.addEventListener('pointermove', e => {
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    el.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  }));
+
+  // Changelog tippt sich selbst
+  const term = document.getElementById('term');
+  const cmd = document.getElementById('cmd');
+  if (!still) { term.classList.add('typing'); cmd.textContent = ''; }
+  function typeTerm() {
+    if (still) return;
+    const text = cmd.dataset.text; let i = 0;
+    const later = [...term.querySelectorAll('.later, .log li')];
+    const tick = () => {
+      cmd.textContent = text.slice(0, ++i);
+      if (i < text.length) return setTimeout(tick, 28 + Math.random() * 40);
+      later.forEach((el, n) => setTimeout(() => el.classList.add('on'), 250 + n * 90));
+    };
+    setTimeout(tick, 500);
+  }
+
+  // Zahlen zählen hoch
+  function countUp() {
+    if (still) return;
+    document.querySelectorAll('#bars [data-count]').forEach(el => {
+      const end = +el.dataset.count, unit = el.dataset.unit || '';
+      const t0 = performance.now();
+      const step = now => {
+        const k = Math.min(1, (now - t0) / 1600), e = 1 - Math.pow(1 - k, 3);
+        el.textContent = Math.round(end * e) + unit;
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  // Rundgang: Reiter, Pfeiltasten und automatisches Weiterschalten
+  const tour = document.getElementById('tour');
+  const tabs = [...tour.querySelectorAll('[role="tab"]')];
+  function select(tab, focus) {
+    tabs.forEach(t => {
+      const on = t === tab;
+      t.setAttribute('aria-selected', on);
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    if (focus) tab.focus();
+    const list = tab.parentElement;
+    if (list.scrollWidth > list.clientWidth) list.scrollTo({ left: tab.offsetLeft - 16, behavior: still ? 'auto' : 'smooth' });
+  }
+  const stopAuto = () => tour.classList.remove('auto');
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => { stopAuto(); select(t); });
+    t.addEventListener('keydown', e => {
+      const d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+      let next = null;
+      if (d) next = tabs[(i + d + tabs.length) % tabs.length];
+      if (e.key === 'Home') next = tabs[0];
+      if (e.key === 'End') next = tabs[tabs.length - 1];
+      if (next) { e.preventDefault(); stopAuto(); select(next, true); }
+    });
+    t.querySelector('.bar').addEventListener('animationend', () => {
+      if (tour.classList.contains('auto') && t.getAttribute('aria-selected') === 'true') select(tabs[(i + 1) % tabs.length]);
+    });
+  });
+  if (!still) {
+    new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && !tour.dataset.started) { tour.dataset.started = 1; tour.classList.add('auto'); }
+      tour.classList.toggle('hold', !e.isIntersecting);
+    }, { threshold: .35 }).observe(tour);
+    tour.addEventListener('pointerenter', () => tour.classList.add('hold'));
+    tour.addEventListener('pointerleave', () => tour.classList.remove('hold'));
+  }
+})();
+</script>
+<script>
+// Version, Dateigrößen und Download-Adressen live aus dem neuesten GitHub-Release.
+// Ohne Netz oder bei API-Limit bleiben die eingetragenen Werte und die /latest/-Links stehen.
+(async () => {
+  const api = 'https://api.github.com/repos/Zenutrix/NebulaSSH/releases/latest';
+  const key = 'nebula-release';
+  let rel = null;
+  try {
+    const c = JSON.parse(sessionStorage.getItem(key) || 'null');
+    if (c && Date.now() - c.t < 600000) rel = c.r;
+  } catch (e) {}
+  if (!rel) {
+    try {
+      const res = await fetch(api, { headers: { Accept: 'application/vnd.github+json' } });
+      if (!res.ok) return;
+      const j = await res.json();
+      rel = {
+        version: String(j.tag_name || '').replace(/^v/i, ''),
+        date: j.published_at,
+        url: j.html_url,
+        assets: Object.fromEntries((j.assets || []).map(a => [a.name, { size: a.size, url: a.browser_download_url }]))
+      };
+      try { sessionStorage.setItem(key, JSON.stringify({ t: Date.now(), r: rel })); } catch (e) {}
+    } catch (e) { return; }
+  }
+  const mb = n => (n / 1048576).toFixed(1) + ' MB';
+  if (rel.version) document.querySelectorAll('[data-gh-version]').forEach(el => el.textContent = rel.version);
+  document.querySelectorAll('[data-size]').forEach(el => {
+    const a = rel.assets[el.dataset.size];
+    if (a) el.textContent = mb(a.size);
+  });
+  document.querySelectorAll('a[data-asset]').forEach(el => {
+    const a = rel.assets[el.dataset.asset];
+    if (a) el.href = a.url;
+  });
+  const r = document.querySelector('[data-gh-release]');
+  if (r && rel.version) {
+    let d = '';
+    try { d = new Date(rel.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) {}
+    r.textContent = ' – currently ' + rel.version + (d ? ', released ' + d : '');
+  }
+})();
+</script>
+</body>
+</html>

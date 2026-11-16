@@ -1,4 +1,4 @@
-﻿//! Hauptfenster von NebulaSSH: Zustand, Verbindungslogik und Grundlayout.
+//! Hauptfenster von NebulaSSH: Zustand, Verbindungslogik und Grundlayout.
 
 use crate::data::{self, BaudProfile, Host, Prefs, Snippet, SshKey};
 use crate::terminal::{Output, Size, Terminal, View};
@@ -113,6 +113,8 @@ pub struct Tab {
     pub stats: StatsState,
     /// In einem eigenen Fenster
     pub detached: Option<egui::Pos2>,
+    /// Grund, warum die letzte Verbindung fehlgeschlagen ist
+    pub error: Option<String>,
 }
 
 impl Tab {
@@ -589,6 +591,7 @@ impl App {
             connected_at: None,
             stats: StatsState::default(),
             detached: None,
+            error: None,
         });
         self.active = Some(id);
         self.focus_term = true;
@@ -637,6 +640,7 @@ impl App {
         };
         let tab = &mut self.tabs[idx];
         tab.status = Status::Connecting;
+        tab.error = None;
         tab.stats = StatsState::default();
         let (cols, rows) = (tab.term.size.cols as u32, tab.term.size.rows as u32);
         match host.kind.as_str() {
@@ -1008,6 +1012,11 @@ impl App {
         let Some(t) = self.tab(id) else { return };
         t.task = None;
         t.status = Status::Closed;
+        t.error = Some(if err.starts_with(ssh::HOSTKEY_CHANGED) {
+            t!("Der Host-Key des Servers hat sich geändert", "The server's host key has changed").to_string()
+        } else {
+            ssh::clean_error(&err).to_string()
+        });
         if let Some(rest) = err.strip_prefix(ssh::HOSTKEY_CHANGED) {
             let (host_id, change) = rest.split_once('|').unwrap_or((rest, ""));
             t.term.print(&tf!(
@@ -1390,7 +1399,16 @@ impl App {
                 .size_range(260.0..=420.0)
                 .resizable(true)
                 .frame(egui::Frame::new().fill(PANEL).inner_margin(Margin::symmetric(16, 0)).stroke(Stroke::new(1.0, LINE)))
-                .show(ui, |ui| self.sidebar(ui));
+                .show(ui, |ui| {
+                    // Inhalt in einem eigenen Bereich: zu breite Elemente dürfen die Leiste nicht
+                    // aufschieben – sonst springt sie nach dem Ziehen auf die alte Breite zurück.
+                    let rect = ui.max_rect();
+                    let mut inner = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(*ui.layout()));
+                    inner.set_clip_rect(rect.intersect(ui.clip_rect()));
+                    self.sidebar(&mut inner);
+                    // Genau die gezogene Breite belegen, damit das Panel sie behält
+                    ui.expand_to_include_rect(rect);
+                });
         }
 
         egui::Panel::bottom("statusbar")
@@ -1410,7 +1428,15 @@ impl App {
                 .size_range(300.0..=900.0)
                 .resizable(true)
                 .frame(egui::Frame::new().fill(PANEL).inner_margin(Margin::symmetric(12, 6)).stroke(Stroke::new(1.0, LINE)))
-                .show(ui, |ui| self.files_panel(ui, id));
+                .show(ui, |ui| {
+                    // Wie bei der Seitenleiste: Inhalt darf das Panel nicht aufschieben
+                    let rect = ui.max_rect();
+                    let mut inner = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(*ui.layout()));
+                    inner.set_clip_rect(rect.intersect(ui.clip_rect()));
+                    self.files_panel(&mut inner, id);
+                    // Genau die gezogene Breite belegen, damit das Panel sie behält
+                    ui.expand_to_include_rect(rect);
+                });
         }
 
         egui::CentralPanel::no_frame().show(ui, |ui| self.terminal_area(ui));
@@ -1456,6 +1482,12 @@ impl App {
                     clicked = true;
                 }
             }
+            // Getrennt / fehlgeschlagen: Leiste oben über dem Terminal (nicht überdeckend)
+            let banner = (tab.status == Status::Closed).then(|| {
+                let b = egui::Rect::from_min_size(term_rect.min, vec2(term_rect.width(), 56.0));
+                term_rect.min.y += 56.0;
+                b
+            });
             let tid = egui::Id::new(("term", id));
             if focus {
                 ui.memory_mut(|m| m.request_focus(tid));
@@ -1484,31 +1516,53 @@ impl App {
             if header && active {
                 ui.painter().rect_stroke(rect.shrink(0.5), 0.0, Stroke::new(1.0, ACCENT_HI), egui::StrokeKind::Inside);
             }
-            // Hinweis bei getrennter Verbindung
-            if tab.status == Status::Closed {
-                let bar = egui::Rect::from_min_size(egui::pos2(rect.left() + 14.0, rect.bottom() - 58.0), vec2(rect.width() - 28.0, 44.0));
-                ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {
-                    egui::Frame::new()
-                        .fill(Color32::from_rgb(0x2a, 0x16, 0x24))
-                        .stroke(Stroke::new(1.0, RED.gamma_multiply(0.6)))
-                        .corner_radius(8)
-                        .inner_margin(Margin::symmetric(12, 6))
-                        .show(ui, |ui| {
-                            ui.horizontal_centered(|ui| {
-                                ui.label(RichText::new(t!("⚠ Verbindung getrennt", "⚠ Disconnected")).color(Color32::WHITE).strong());
-                                if rect.width() > 620.0 {
-                                    ui.label(RichText::new(t!("– Enter drückt „Neu verbinden“", "– press Enter to reconnect")).color(MUTED));
-                                }
-                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                    if ui.button(t!("Tab schließen", "Close tab")).clicked() {
-                                        close = true;
-                                    }
-                                    if ui.add(egui::Button::new(RichText::new(t!("⟳ Neu verbinden", "⟳ Reconnect")).color(Color32::WHITE)).fill(ACCENT)).clicked() {
-                                        reconnect = true;
-                                    }
-                                });
-                            });
-                        });
+            if let Some(bar) = banner {
+                let failed = tab.error.is_some();
+                let p = ui.painter();
+                p.rect_filled(bar, 0.0, Color32::from_rgb(0x2a, 0x14, 0x20));
+                p.line_segment([bar.left_bottom(), bar.right_bottom()], Stroke::new(1.0, RED.gamma_multiply(0.55)));
+                p.line_segment([bar.left_top(), bar.left_bottom()], Stroke::new(3.0, RED));
+                ui.scope_builder(egui::UiBuilder::new().max_rect(bar.shrink2(vec2(16.0, 0.0))).layout(Layout::left_to_right(Align::Center)), |ui| {
+                    ui.spacing_mut().item_spacing.x = 8.0;
+                    crate::sidebar::badge_icon(ui, Icon::Warning, 30.0, RED);
+                    ui.add_space(2.0);
+                    // Rechts die Knöpfe, links der Text mit dem Rest der Breite
+                    let buttons_w = if bar.width() > 560.0 { 290.0 } else { 90.0 };
+                    let text_w = (ui.available_width() - buttons_w).max(60.0);
+                    ui.allocate_ui_with_layout(vec2(text_w, 44.0), Layout::top_down(Align::Min), |ui| {
+                        ui.add_space(4.0);
+                        ui.spacing_mut().item_spacing.y = 1.0;
+                        let title = if failed { t!("Verbindung fehlgeschlagen", "Connection failed") } else { t!("Verbindung getrennt", "Disconnected") };
+                        ui.add(egui::Label::new(RichText::new(title).size(14.0).family(egui::FontFamily::Name("ui-bold".into())).color(Color32::WHITE)).truncate());
+                        let detail = match &tab.error {
+                            Some(e) => e.clone(),
+                            None => t!("Enter drückt „Neu verbinden“", "Press Enter to reconnect").to_string(),
+                        };
+                        ui.add(egui::Label::new(RichText::new(&detail).size(12.0).color(Color32::from_rgb(0xe0, 0xa8, 0xb4))).truncate()).on_hover_text(&detail);
+                    });
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        ui.spacing_mut().item_spacing.x = 8.0;
+                        let wide = bar.width() > 560.0;
+                        let close_btn = if wide {
+                            egui::Button::image_and_text(icons::image(ui.ctx(), Icon::Close, 13.0, Color32::from_gray(225)), t!("Tab schließen", "Close tab"))
+                        } else {
+                            egui::Button::image(icons::image(ui.ctx(), Icon::Close, 13.0, Color32::from_gray(225)))
+                        };
+                        if ui.add(close_btn.min_size(vec2(0.0, 32.0))).on_hover_text(t!("Tab schließen", "Close tab")).clicked() {
+                            close = true;
+                        }
+                        let re = if wide {
+                            egui::Button::image_and_text(
+                                icons::image(ui.ctx(), Icon::Refresh, 14.0, Color32::WHITE),
+                                RichText::new(t!("Neu verbinden", "Reconnect")).strong().color(Color32::WHITE),
+                            )
+                        } else {
+                            egui::Button::image(icons::image(ui.ctx(), Icon::Refresh, 14.0, Color32::WHITE))
+                        };
+                        if ui.add(re.fill(ACCENT).min_size(vec2(0.0, 32.0))).on_hover_text(t!("Neu verbinden (Enter)", "Reconnect (Enter)")).clicked() {
+                            reconnect = true;
+                        }
+                    });
                 });
             }
         });
@@ -1967,4 +2021,5 @@ impl eframe::App for App {
         }
     }
 }
+
 
